@@ -1,0 +1,28 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:../data/bot_data.db"
+}
+
+model Schedule {
+  id        Int      @id @default(autoincrement())
+  task_id   String
+  time      DateTime
+  recurring String?
+  // JSON.stringified data
+  data      String?
+
+  @@map("schedules")
+}
+
+// ACTUAL MODELS FOR THE FEATURES OF THIS BOT //
+
+model MessageOnlyChannel {
+  channel_id String @id
+  guild_id   String
+
+  @@map("message_only_channels")
+}

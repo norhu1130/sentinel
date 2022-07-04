@@ -1,0 +1,49 @@
+{
+	"name": "@vladfrangu/flokie-utils-bot",
+	"version": "1.0.0",
+	"type": "module",
+	"main": "dist/main.js",
+	"scripts": {
+		"start": "npm run cleanbuild && node .",
+		"lint": "eslint --fix src --ext ts",
+		"build": "tsc -b src",
+		"cleanbuild": "npx rimraf dist && tsc -b src",
+		"watch": "tsc -b src -w",
+		"dev": "npm run start"
+	},
+	"private": true,
+	"author": "Vlad Frangu <kingdgrizzle@gmail.com>",
+	"license": "MIT",
+	"devDependencies": {
+		"@sapphire/eslint-config": "^4.3.7",
+		"@sapphire/ts-config": "^3.3.4",
+		"@types/node": "^18.0.0",
+		"@typescript-eslint/eslint-plugin": "^5.30.3",
+		"@typescript-eslint/parser": "^5.30.3",
+		"eslint": "^8.19.0",
+		"eslint-config-prettier": "^8.5.0",
+		"eslint-plugin-prettier": "^4.2.1",
+		"prettier": "^2.7.1",
+		"prisma": "^4.0.0",
+		"typescript": "^4.7.4"
+	},
+	"dependencies": {
+		"@mikro-orm/sql-highlighter": "^1.0.1",
+		"@prisma/client": "^4.0.0",
+		"@sapphire/decorators": "^4.3.6",
+		"@sapphire/framework": "next",
+		"@sapphire/plugin-logger": "^2.2.1",
+		"@sapphire/plugin-subcommands": "^3.0.0-pr-271.8a04ac90.0",
+		"@sapphire/time-utilities": "^1.7.4",
+		"@sapphire/utilities": "^3.7.0",
+		"colorette": "^2.0.19",
+		"discord-api-types": "0.33.x",
+		"discord.js": "^13.8.1",
+		"tslib": "^2.4.0"
+	},
+	"optionalDependencies": {
+		"bufferutil": "^4.0.6",
+		"utf-8-validate": "^5.0.9",
+		"zlib-sync": "^0.1.7"
+	}
+}

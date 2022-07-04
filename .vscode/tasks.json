@@ -1,0 +1,13 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"type": "npm",
+			"script": "cleanbuild",
+			"group": "build",
+			"problemMatcher": [],
+			"label": "npm: cleanbuild",
+			"detail": "npx rimraf dist && tsc -b src"
+		}
+	]
+}
