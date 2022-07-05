@@ -21,6 +21,13 @@ setInterval(() => {
 })
 export class BanAddChecker extends Listener<typeof Events.GuildBanAdd> {
 	public async run(ban: GuildBan) {
+		const guildIdsToCheck = useGuildIdsToSyncBansIn();
+		const { guild } = ban;
+
+		if (!guildIdsToCheck.includes(guild.id)) {
+			return;
+		}
+
 		if (recentlySeenBanEvents.has(ban.user.id)) {
 			this.container.logger.debug(
 				`Ignoring ban from ${ban.guild.name} (${ban.guild.id}) for ${ban.user.tag} (${ban.user.id}) because it was recently seen`,
@@ -85,6 +92,13 @@ export class BanAddChecker extends Listener<typeof Events.GuildBanAdd> {
 })
 export class BanRemoveChecker extends Listener<typeof Events.GuildBanRemove> {
 	public async run(ban: GuildBan) {
+		const guildIdsToCheck = useGuildIdsToSyncBansIn();
+		const { guild } = ban;
+
+		if (!guildIdsToCheck.includes(guild.id)) {
+			return;
+		}
+
 		if (recentlySeenBanEvents.has(ban.user.id)) {
 			this.container.logger.debug(
 				`Ignoring unban from ${ban.guild.name} (${ban.guild.id}) for ${ban.user.tag} (${ban.user.id}) because it was recently seen`,
