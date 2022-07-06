@@ -1,7 +1,7 @@
 import { time } from '@discordjs/builders';
 import type { User, VoteKick } from '@prisma/client';
 import { Time } from '@sapphire/time-utilities';
-import { MessageEmbed, TextChannel } from 'discord.js';
+import { GuildTextBasedChannel, MessageEmbed } from 'discord.js';
 import memoize from 'lodash.memoize';
 import { Task, TaskRunData } from '../../lib/schedule/tasks/Task.js';
 import { fetchReadableUser } from '../../lib/utils.js';
@@ -166,7 +166,7 @@ export class HandleVoteResult extends Task {
 	private async logToModLog(vote: VoteKick, finalAction: FinalAction) {
 		if (!process.env.MODLOG_CHANNEL_ID) return;
 
-		const channel = this.container.client.channels.cache.get(process.env.MODLOG_CHANNEL_ID) as TextChannel;
+		const channel = this.container.client.channels.cache.get(process.env.MODLOG_CHANNEL_ID) as GuildTextBasedChannel;
 		const kickedUser = await this.container.client.users.fetch(vote.user_to_kick);
 
 		await channel.send({
@@ -186,7 +186,7 @@ export class HandleVoteResult extends Task {
 						].join('\n'),
 					)
 					.setThumbnail(kickedUser.displayAvatarURL({ dynamic: true, size: 256, format: 'png' }))
-					.setFooter('Started at')
+					.setFooter({ text: 'Started at' })
 					.setTimestamp(vote.created_at),
 			],
 		});
