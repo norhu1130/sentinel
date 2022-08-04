@@ -64,6 +64,12 @@ export class ScheduleManager {
 			const execute = [];
 			for (const entry of this.queue) {
 				if (entry.time.getTime() > now) break;
+				if (entry['paused']) {
+					container.logger.debug(
+						`Found schedule entity for task ${entry.taskID} that was paused, yet expected to run. Will resume it forcefully.`,
+					);
+					entry.resume();
+				}
 				execute.push(entry.run());
 			}
 
