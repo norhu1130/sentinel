@@ -20,12 +20,16 @@ model Schedule {
 
 // ACTUAL MODELS FOR THE FEATURES OF THIS BOT //
 
+// Channels in which you need to send an attachment with your message to have it sendable //
+
 model MessageOnlyChannel {
   channel_id String @id
   guild_id   String
 
   @@map("message_only_channels")
 }
+
+// Guild ban syncing //
 
 model SharedGuildBan {
   user_id  String  @id
@@ -34,6 +38,8 @@ model SharedGuildBan {
 
   @@map("shared_guild_bans")
 }
+
+// Recurring messages in channels for things like announcements //
 
 model AutoPin {
   id                  String   @id @default(cuid())
@@ -81,4 +87,62 @@ model User {
   reset_kicks_at DateTime?
 
   @@map("user")
+}
+
+// Polls! //
+
+model Poll {
+  id         String       @id @default(cuid())
+  // The actual question asked
+  question   String
+  // The options for the poll (always at least two)
+  options    String[]
+  // When the poll was created
+  created_at DateTime     @default(now())
+  // When the poll will end
+  ends_at    DateTime
+  // If the poll ended
+  ended      Boolean      @default(false)
+  // The guild where the poll was created
+  guild_id   String
+  // The channel where the poll was created
+  channel_id String
+  // The message id for the sent message
+  message_id String
+  // The user who created the poll (just to have!)
+  author_id  String
+  // The poll answers
+  answers    PollAnswer[]
+
+  @@map("polls")
+}
+
+model PollAnswer {
+  // Which poll this answer is for
+  poll_id      String
+  // The user that selected the option
+  user_id      String
+  // The option index they chose (while risky to use a number, the options are static once created)
+  option_index Int
+
+  // The poll this answer is for
+  poll Poll @relation(fields: [poll_id], references: [id], onDelete: Cascade)
+
+  @@id([poll_id, user_id])
+  @@map("poll_answers")
+}
+
+// Role syncing across guilds (lord help) //
+model RoleSync {
+  id                   String @id @default(cuid())
+  // The origin guild from where to monitor role changes
+  origin_guild_id      String
+  // The role id in the origin guild that should trigger this role sync when encountered
+  origin_role_id       String
+  // The destination guild id where this role sync should apply
+  destination_guild_id String
+  // The destination role id in the destination guild that should be triggered by this role sync
+  destination_role_id  String
+
+  @@map("role_syncs")
 }
