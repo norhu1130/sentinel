@@ -116,7 +116,7 @@ export class RoleSyncCommand extends Subcommand {
 				}
 			} else {
 				try {
-					await memberInCurrentServer.roles.add(
+					await memberInCurrentServer.roles.remove(
 						roleInThisServer,
 						`Role sync: removed role from member as they lack the role in ${resolvedOriginGuild.name}`,
 					);
