@@ -7,6 +7,7 @@ import { chunk } from '@sapphire/utilities';
 import { PermissionFlagsBits } from 'discord-api-types/v10';
 import { Constants, MessageActionRow, MessageButton } from 'discord.js';
 import { createInfoEmbed } from '../lib/utils/createInfoEmbed.js';
+import { generatePollEmbedDescription } from '../lib/utils/polls/generatePollEmbed.js';
 import { trimPretty } from '../lib/utils/trim.js';
 
 @ApplyOptions<Subcommand.Options>({
@@ -42,21 +43,18 @@ export class PollCommand extends Subcommand {
 				options: pollOptions,
 				message_id: 'UPDATE_ME',
 			},
+			include: {
+				answers: true,
+			},
 		});
 
 		const message = await interaction.channel!.send({
 			embeds: [
-				createInfoEmbed(`**A poll has been created!** It ends **${time(parsedEndAfter, 'R')}**\n\n${question}`)
+				createInfoEmbed(generatePollEmbedDescription(poll, false))
+					.setTitle(question)
 					.setFooter({
 						text: `Poll started by ${interaction.user.tag}`,
-					})
-					.setFields(
-						pollOptions.map((option, index) => ({
-							name: `Option ${index + 1}`,
-							value: option,
-							inline: true,
-						})),
-					),
+					}),
 			],
 			components: this._generatePollComponents(poll),
 		});

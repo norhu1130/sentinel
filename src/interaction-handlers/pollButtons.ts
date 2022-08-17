@@ -1,9 +1,10 @@
 // ID format: poll.id.{my_option|remove_selection|select_{id}}
 
 import { ApplyOptions } from '@sapphire/decorators';
-import { InteractionHandler, InteractionHandlerTypes } from '@sapphire/framework';
-import type { ButtonInteraction } from 'discord.js';
+import { InteractionHandler, InteractionHandlerTypes, Result } from '@sapphire/framework';
+import { ButtonInteraction, MessageEmbed } from 'discord.js';
 import { createInfoEmbed } from '../lib/utils/createInfoEmbed.js';
+import { generatePollEmbedDescription } from '../lib/utils/polls/generatePollEmbed.js';
 
 @ApplyOptions<InteractionHandler.Options>({ interactionHandlerType: InteractionHandlerTypes.Button })
 export class PollButtonHandler extends InteractionHandler {
@@ -20,7 +21,6 @@ export class PollButtonHandler extends InteractionHandler {
 
 		const poll = await this.container.prisma.poll.findFirst({
 			where: { id: split[0] },
-			include: { answers: true },
 		});
 
 		return this.some({
@@ -37,11 +37,13 @@ export class PollButtonHandler extends InteractionHandler {
 			});
 		}
 
+		const existingAnswer = await this.container.prisma.pollAnswer.findFirst({
+			where: { poll_id: poll.id, user_id: interaction.user.id },
+		});
+
 		switch (action) {
 			case 'my_option': {
-				const answer = poll.answers.find((item) => item.user_id === interaction.user.id);
-
-				if (!answer) {
+				if (!existingAnswer) {
 					return interaction.reply({
 						ephemeral: true,
 						embeds: [createInfoEmbed(`You haven't selected an answer yet!`)],
@@ -51,7 +53,9 @@ export class PollButtonHandler extends InteractionHandler {
 				return interaction.reply({
 					embeds: [
 						createInfoEmbed(
-							`You selected option number **${answer.option_index + 1}**: ${poll.options[answer.option_index]}`,
+							`You selected option number **${existingAnswer.option_index + 1}**: ${
+								poll.options[existingAnswer.option_index]
+							}`,
 						),
 					],
 					ephemeral: true,
@@ -63,7 +67,9 @@ export class PollButtonHandler extends InteractionHandler {
 						where: { poll_id_user_id: { poll_id: poll.id, user_id: interaction.user.id } },
 					});
 
-					return interaction.reply({
+					await this.updatePollMessage(interaction, poll.id);
+
+					await interaction.followUp({
 						ephemeral: true,
 						embeds: [
 							createInfoEmbed(
@@ -73,6 +79,8 @@ export class PollButtonHandler extends InteractionHandler {
 							),
 						],
 					});
+
+					return;
 				} catch {
 					return interaction.reply({
 						embeds: [createInfoEmbed(`You haven't selected an answer yet! There's no answer to clear 👀`)],
@@ -101,11 +109,9 @@ export class PollButtonHandler extends InteractionHandler {
 				}
 
 				// Lets see if the user already voted
-				const oldVote = poll.answers.find((answer) => answer.user_id === interaction.user.id);
-
-				if (oldVote) {
+				if (existingAnswer) {
 					// Same vote, no need to do anything
-					if (oldVote.option_index === numericIndex) {
+					if (existingAnswer.option_index === numericIndex) {
 						return interaction.reply({
 							embeds: [
 								createInfoEmbed(
@@ -122,16 +128,20 @@ export class PollButtonHandler extends InteractionHandler {
 						where: { poll_id_user_id: { poll_id: poll.id, user_id: interaction.user.id } },
 					});
 
-					return interaction.reply({
+					await this.updatePollMessage(interaction, poll.id);
+
+					await interaction.followUp({
 						embeds: [
 							createInfoEmbed(
-								`You changed your vote from option number **${oldVote.option_index + 1}** to option number **${
+								`You changed your vote from option number **${existingAnswer.option_index + 1}** to option number **${
 									numericIndex + 1
 								}**: ${poll.options[numericIndex]}`,
 							),
 						],
 						ephemeral: true,
 					});
+
+					return;
 				}
 
 				// User has not voted before, create
@@ -143,13 +153,38 @@ export class PollButtonHandler extends InteractionHandler {
 					},
 				});
 
-				return interaction.reply({
+				await this.updatePollMessage(interaction, poll.id);
+
+				await interaction.followUp({
 					embeds: [
 						createInfoEmbed(`You voted for option number **${numericIndex + 1}**: ${poll.options[numericIndex]}`),
 					],
 					ephemeral: true,
 				});
 			}
+		}
+	}
+
+	private async updatePollMessage(interaction: ButtonInteraction, pollId: string) {
+		const poll = await this.container.prisma.poll.findFirst({ where: { id: pollId }, include: { answers: true } });
+
+		if (!poll) {
+			return;
+		}
+
+		const newDescription = generatePollEmbedDescription(poll, false);
+
+		const originalMessage = (
+			await Result.fromAsync(() => interaction.channel!.messages.fetch(interaction.message.id))
+		).unwrapOr(null);
+
+		if (originalMessage) {
+			const newEmbed = new MessageEmbed(originalMessage.embeds[0]);
+			newEmbed.setDescription(newDescription);
+
+			await interaction.update({
+				embeds: [newEmbed],
+			});
 		}
 	}
 }

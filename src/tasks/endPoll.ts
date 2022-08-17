@@ -1,9 +1,9 @@
-import { time } from '@discordjs/builders';
 import { Result } from '@sapphire/framework';
 import type { GuildTextBasedChannel } from 'discord.js';
 import { Task, TaskRunData } from '../lib/schedule/tasks/Task.js';
 import { fetchReadableUser } from '../lib/utils.js';
 import { createInfoEmbed } from '../lib/utils/createInfoEmbed.js';
+import { generatePollEmbedDescription } from '../lib/utils/polls/generatePollEmbed.js';
 
 export class EndPoll extends Task {
 	public async run(data: TaskRunData) {
@@ -13,7 +13,6 @@ export class EndPoll extends Task {
 			where: { id: pollId },
 			include: {
 				answers: true,
-				_count: true,
 			},
 		});
 
@@ -32,42 +31,19 @@ export class EndPoll extends Task {
 
 		const message = messageFetchResult.unwrap();
 
-		const newEmbedDescription = [
-			`**The poll ended!** It was started on ${time(poll.created_at)}.`,
-			'',
-			`${poll.question}`,
-			'',
-			'**Results:**',
-		];
-
-		for (let i = 0; i < poll.options.length; i++) {
-			const answersOfThisOption = poll.answers.filter((answer) => answer.option_index === i);
-
-			const percentage = Math.trunc((answersOfThisOption.length / poll._count.answers) * 100);
-
-			newEmbedDescription.push(
-				`> Option ${i + 1} received **${
-					answersOfThisOption.length === 1 ? '1 vote' : `${answersOfThisOption.length} votes`
-				}** (${Number.isNaN(percentage) ? 0 : percentage}%).`,
-			);
-		}
+		const newEmbedDescription = [`**The poll ended!**`, '', '**Results:**', generatePollEmbedDescription(poll, true)];
 
 		newEmbedDescription.push(
-			'',
 			`> In total, there ${
-				poll._count.answers === 1 ? `was **${poll._count.answers}** vote` : `were **${poll._count.answers}** votes`
+				poll.answers.length === 1 ? `was **${poll.answers.length}** vote` : `were **${poll.answers.length}** votes`
 			}.`,
 		);
 
 		const newEmbed = createInfoEmbed(newEmbedDescription.join('\n'))
-			.setFields(
-				poll.options.map((option, index) => ({
-					name: `Option ${index + 1}`,
-					value: option,
-					inline: true,
-				})),
-			)
-			.setFooter({ text: `Poll started by ${await fetchReadableUser(poll.author_id)}` });
+			.setTitle(poll.question)
+			.setFooter({
+				text: `Poll started by ${await fetchReadableUser(poll.author_id)}`,
+			});
 
 		await message.edit({
 			embeds: [newEmbed],
