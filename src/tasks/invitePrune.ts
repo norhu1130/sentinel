@@ -1,4 +1,5 @@
 import { Result } from '@sapphire/framework';
+import { Time } from '@sapphire/time-utilities';
 import { Task } from '../lib/schedule/tasks/Task.js';
 
 const header = '[INVITE PRUNE] ';
@@ -6,6 +7,8 @@ const header = '[INVITE PRUNE] ';
 export class InvitePrune extends Task {
 	public override async run() {
 		const guildsToCheck = await this.container.prisma.invitePrune.findMany();
+
+		const twoHoursAgo = Date.now() - Time.Hour * 2;
 
 		this.container.logger.info(`${header}Starting check for invite pruning...`);
 
@@ -29,9 +32,19 @@ export class InvitePrune extends Task {
 
 			const invites = invitesResult.unwrap();
 
+			if (invites.size < 500) {
+				this.container.logger.info(
+					`${header}  Skipping pruning invites for ${guild.name} ${guild_id} as there are less than 500 present`,
+				);
+				continue;
+			}
+
 			for (const invite of invites.values()) {
 				// Delete all invites that expire after some time
-				if (invite.expiresTimestamp !== null) {
+				// If the invite has a created timestamp present, we can check if it was made more than two hours ago
+				const isValidForExpiry = invite.createdTimestamp ? invite.createdTimestamp < twoHoursAgo : true;
+
+				if (invite.expiresTimestamp !== null && isValidForExpiry) {
 					try {
 						await invite.delete(`Invite Prune: deleting invite that would expire eventually`);
 					} catch (err) {
