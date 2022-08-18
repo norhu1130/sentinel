@@ -46,7 +46,9 @@ export class InvitePrune extends Task {
 
 				if (invite.expiresTimestamp !== null && isValidForExpiry) {
 					try {
-						await invite.delete(`Invite Prune: deleting invite that would expire eventually`);
+						await invite.delete(
+							`Invite Prune: deleting invite that would expire eventually and that was made more than two hours ago`,
+						);
 					} catch (err) {
 						this.container.logger.warn(
 							`${header}  Failed to delete invite ${invite.code} for guild ${guild.name} (${guild.id})`,
