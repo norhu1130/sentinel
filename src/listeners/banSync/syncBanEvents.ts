@@ -6,12 +6,19 @@ import { DiscordAPIError, GuildBan } from 'discord.js';
 import { useGuildIdsToSyncBansIn } from '../../lib/utils/hooks/useGuildIdsToSyncBansIn.js';
 
 const recentlySeenBanEvents = new Map<string, { userId: string; at: number }>();
+const recentlySeenUnbanEvents = new Map<string, { userId: string; at: number }>();
 const header = '[BAN SYNC] ';
 
 setInterval(() => {
 	for (const [userId, { at }] of recentlySeenBanEvents) {
 		if (Date.now() - at > Time.Minute * 2) {
 			recentlySeenBanEvents.delete(userId);
+		}
+	}
+
+	for (const [userId, { at }] of recentlySeenUnbanEvents) {
+		if (Date.now() - at > Time.Minute * 2) {
+			recentlySeenUnbanEvents.delete(userId);
 		}
 	}
 }).unref();
@@ -79,7 +86,7 @@ export class BanAddChecker extends Listener<typeof Events.GuildBanAdd> {
 				);
 
 				await guild.bans.create(maybeMember.id, {
-					days: 0,
+					deleteMessageSeconds: 0,
 					reason: `BAN SYNC(${fullBan.guild.name}): ${fullBan.reason ?? 'No reason'}`,
 				});
 			}
@@ -100,14 +107,14 @@ export class BanRemoveChecker extends Listener<typeof Events.GuildBanRemove> {
 			return;
 		}
 
-		if (recentlySeenBanEvents.has(ban.user.id)) {
+		if (recentlySeenUnbanEvents.has(ban.user.id)) {
 			this.container.logger.debug(
 				`${header}Ignoring unban from ${ban.guild.name} (${ban.guild.id}) for ${ban.user.tag} (${ban.user.id}) because it was recently seen`,
 			);
 			return;
 		}
 
-		recentlySeenBanEvents.set(ban.user.id, { userId: ban.user.id, at: Date.now() });
+		recentlySeenUnbanEvents.set(ban.user.id, { userId: ban.user.id, at: Date.now() });
 
 		this.container.logger.info(
 			`${header}Received ban delete for ${ban.user.tag} (${ban.user.id}) in ${ban.guild.name} (${ban.guild.id}). Syncing with the other guilds...`,

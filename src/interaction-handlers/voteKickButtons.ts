@@ -1,6 +1,6 @@
 import { ApplyOptions } from '@sapphire/decorators';
 import { InteractionHandler, InteractionHandlerTypes } from '@sapphire/framework';
-import { ButtonInteraction, Message, MessageEmbed } from 'discord.js';
+import { ButtonInteraction, EmbedBuilder, Message } from 'discord.js';
 import { getMemberFromInteraction } from '../lib/utils.js';
 
 @ApplyOptions<InteractionHandler.Options>({
@@ -47,7 +47,7 @@ export class ButtonHandler extends InteractionHandler {
 		if (!previousVote) {
 			return interaction.reply({
 				ephemeral: true,
-				embeds: [new MessageEmbed().setColor('RED').setDescription("Couldn't find a vote kick for that message!")],
+				embeds: [new EmbedBuilder().setColor('Red').setDescription("Couldn't find a vote kick for that message!")],
 			});
 		}
 
@@ -55,8 +55,8 @@ export class ButtonHandler extends InteractionHandler {
 			return interaction.reply({
 				ephemeral: true,
 				embeds: [
-					new MessageEmbed()
-						.setColor('RED')
+					new EmbedBuilder()
+						.setColor('Red')
 						.setDescription("You cannot vote for a member with whom you're not sharing the same voice channel!"),
 				],
 			});
@@ -69,14 +69,13 @@ export class ButtonHandler extends InteractionHandler {
 		) {
 			return interaction.reply({
 				ephemeral: true,
-				embeds: [new MessageEmbed().setColor('RED').setDescription('You cannot cast the same vote!')],
+				embeds: [new EmbedBuilder().setColor('Red').setDescription('You cannot cast the same vote!')],
 			});
 		}
 
 		// Field 0 is voters who said yes
 		// Field 1 is voters who said no
-		// @ts-expect-error skipValidation parameter will not be documented by us at discord.js, but we can use it still
-		const updatedMessageEmbed = new MessageEmbed(originalMessage.embeds[0], true);
+		const updatedMessageEmbed = EmbedBuilder.from(originalMessage.embeds[0]);
 
 		const keyToUpdate = action === 'yes' ? 'voters_agreeing_with_kick' : 'voters_disagreeing_with_kick';
 		const keyToRemoveFrom = action === 'yes' ? 'voters_disagreeing_with_kick' : 'voters_agreeing_with_kick';
@@ -130,9 +129,9 @@ export class ButtonHandler extends InteractionHandler {
 		}
 
 		// Let the user know we've recorded their vote
-		await interaction.followUp({
+		return interaction.followUp({
 			ephemeral: true,
-			embeds: [new MessageEmbed().setColor('GREEN').setDescription('Your vote was casted successfully')],
+			embeds: [new EmbedBuilder().setColor('Green').setDescription('Your vote was casted successfully')],
 		});
 	}
 }

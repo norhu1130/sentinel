@@ -1,6 +1,6 @@
 import { ApplyOptions } from '@sapphire/decorators';
 import { Listener, ListenerOptions } from '@sapphire/framework';
-import { MessageEmbed, TextChannel, VoiceState } from 'discord.js';
+import { EmbedBuilder, TextChannel, VoiceState } from 'discord.js';
 import memoize from 'lodash.memoize';
 import { setTimeout as sleep } from 'timers/promises';
 
@@ -53,7 +53,7 @@ export default class extends Listener {
 
 				await message.edit({
 					embeds: [
-						new MessageEmbed(message.embeds[0]).setFields(
+						EmbedBuilder.from(message.embeds[0]).setFields(
 							{ name: 'Members agreeing with vote', value: String(voters_agreeing_with_kick.length), inline: true },
 							{
 								name: 'Members disagreeing with vote',

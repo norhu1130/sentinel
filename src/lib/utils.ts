@@ -1,7 +1,6 @@
 import { container } from '@sapphire/framework';
 import { DurationFormatter, Timestamp } from '@sapphire/time-utilities';
-import type { APIMessage } from 'discord-api-types/v10';
-import { Interaction, Message, User } from 'discord.js';
+import { GatewayMessageCreateDispatchData, Interaction, Message, User } from 'discord.js';
 
 export const timeFormat = new Timestamp('YYYY-MM-DD [at] HH:mm:ss [UTC]');
 
@@ -25,7 +24,7 @@ export async function getMemberFromInteraction(interaction: Interaction) {
 	return guild.members.fetch({ user: member.user.id });
 }
 
-export function getMessageUrlFromInteractionResponse(message: Message | APIMessage) {
+export function getMessageUrlFromInteractionResponse(message: Message | GatewayMessageCreateDispatchData) {
 	if (message instanceof Message) {
 		return message.url;
 	}

@@ -3,7 +3,7 @@ import { ApplyOptions } from '@sapphire/decorators';
 import { Subcommand, SubcommandMappingArray } from '@sapphire/plugin-subcommands';
 import { Duration, Time } from '@sapphire/time-utilities';
 import { ChannelType, PermissionFlagsBits } from 'discord-api-types/v10';
-import { GuildTextBasedChannel, MessageAttachment } from 'discord.js';
+import { AttachmentBuilder, GuildTextBasedChannel } from 'discord.js';
 import { durationFormat } from '../lib/utils.js';
 import { createInfoEmbed } from '../lib/utils/createInfoEmbed.js';
 
@@ -34,7 +34,7 @@ export class AutoPin extends Subcommand {
 		},
 	];
 
-	public async createSubcommand(interaction: Subcommand.ChatInputInteraction<'cached'>) {
+	public async createSubcommand(interaction: Subcommand.ChatInputCommandInteraction<'cached'>) {
 		const channel = interaction.options.getChannel('channel', true) as GuildTextBasedChannel;
 		const content = interaction.options.getString('content', true).replaceAll('{newline}', '\n');
 		const rawCheckEvery = interaction.options.getString('check_every', true);
@@ -93,7 +93,7 @@ export class AutoPin extends Subcommand {
 		});
 	}
 
-	public async deleteSubcommand(interaction: Subcommand.ChatInputInteraction<'cached'>) {
+	public async deleteSubcommand(interaction: Subcommand.ChatInputCommandInteraction<'cached'>) {
 		const code = interaction.options.getString('id', true);
 
 		const entry = await this.container.prisma.autoPin.findFirst({
@@ -113,20 +113,23 @@ export class AutoPin extends Subcommand {
 
 		await interaction.reply({
 			embeds: [
-				createInfoEmbed(`Auto-pinned message ${inlineCode(code)} deleted. Attached is the content of the message.`)
-					.addField('Channel its checked in', `<#${entry.channel_id}> (${entry.channel_id})`, true)
-					.addField('Check every', durationFormat.format(Number(entry.check_every_seconds) * 1000), true),
+				createInfoEmbed(
+					`Auto-pinned message ${inlineCode(code)} deleted. Attached is the content of the message.`,
+				).addFields([
+					{ name: 'Channel its checked in', value: `<#${entry.channel_id}> (${entry.channel_id})`, inline: true },
+					{ name: 'Check every', value: durationFormat.format(Number(entry.check_every_seconds) * 1000), inline: true },
+				]),
 			],
 		});
 
 		const buffer = Buffer.from(entry.content, 'utf8');
 
 		await interaction.followUp({
-			attachments: [new MessageAttachment(buffer, `auto-pinned-message-${entry.id}.md`)],
+			files: [new AttachmentBuilder(buffer, { name: `auto-pinned-message-${entry.id}.md` })],
 		});
 	}
 
-	public async listSubcommand(interaction: Subcommand.ChatInputInteraction<'cached'>) {
+	public async listSubcommand(interaction: Subcommand.ChatInputCommandInteraction<'cached'>) {
 		const messages = await this.container.prisma.autoPin.findMany({
 			where: { guild_id: interaction.guildId },
 		});
@@ -157,7 +160,7 @@ export class AutoPin extends Subcommand {
 		});
 	}
 
-	public async showSubcommand(interaction: Subcommand.ChatInputInteraction<'cached'>) {
+	public async showSubcommand(interaction: Subcommand.ChatInputCommandInteraction<'cached'>) {
 		const code = interaction.options.getString('id', true);
 
 		const entry = await this.container.prisma.autoPin.findFirst({
@@ -175,10 +178,13 @@ export class AutoPin extends Subcommand {
 
 		await interaction.reply({
 			embeds: [
-				createInfoEmbed([`Content for auto-pinned message ${inlineCode(entry.id)}`, '', entry.content].join('\n'))
-					.addField('ID', inlineCode(entry.id), true)
-					.addField('Channel its checked in', `<#${entry.channel_id}> (${entry.channel_id})`, true)
-					.addField('Check every', durationFormat.format(Number(entry.check_every_seconds) * 1000)),
+				createInfoEmbed(
+					[`Content for auto-pinned message ${inlineCode(entry.id)}`, '', entry.content].join('\n'),
+				).addFields([
+					{ name: 'ID', value: inlineCode(entry.id), inline: true },
+					{ name: 'Channel its checked in', value: `<#${entry.channel_id}> (${entry.channel_id})`, inline: true },
+					{ name: 'Check every', value: durationFormat.format(Number(entry.check_every_seconds) * 1000) },
+				]),
 			],
 		});
 	}

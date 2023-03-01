@@ -1,7 +1,7 @@
 import { time } from '@discordjs/builders';
 import type { User, VoteKick } from '@prisma/client';
 import { Time } from '@sapphire/time-utilities';
-import { GuildTextBasedChannel, MessageEmbed } from 'discord.js';
+import { EmbedBuilder, TextChannel } from 'discord.js';
 import memoize from 'lodash.memoize';
 import { Task, TaskRunData } from '../../lib/schedule/tasks/Task.js';
 import { fetchReadableUser } from '../../lib/utils.js';
@@ -99,14 +99,14 @@ export class HandleVoteResult extends Task {
 		const { channelId, messageId } = parseMessageUrl(vote.message_url);
 
 		const channel = this.container.client.channels.cache.get(channelId);
-		if (!channel?.isText()) return;
+		if (!channel?.isTextBased()) return;
 
 		const originalMessage = await channel.messages.fetch(messageId);
 
 		await originalMessage.edit({
 			embeds: [
-				new MessageEmbed(originalMessage.embeds[0])
-					.setColor(action === FinalAction.Ignore ? 'YELLOW' : action === FinalAction.Kick ? 'GREEN' : 'RED')
+				EmbedBuilder.from(originalMessage.embeds[0])
+					.setColor(action === FinalAction.Ignore ? 'Yellow' : action === FinalAction.Kick ? 'Green' : 'Red')
 					.setDescription(
 						[
 							`The vote to kick **${await fetchReadableUser(vote.user_to_kick)}** ended!`,
@@ -149,7 +149,7 @@ export class HandleVoteResult extends Task {
 		await member.voice.setChannel(null, 'Kicked member as vote kick passed');
 
 		try {
-			const embed = new MessageEmbed().setColor('RED');
+			const embed = new EmbedBuilder().setColor('Red');
 
 			if (user.remove_role_at) {
 				embed.setDescription(
@@ -170,13 +170,13 @@ export class HandleVoteResult extends Task {
 	private async logToModLog(vote: VoteKick, finalAction: FinalAction) {
 		if (!process.env.MODLOG_CHANNEL_ID) return;
 
-		const channel = this.container.client.channels.cache.get(process.env.MODLOG_CHANNEL_ID) as GuildTextBasedChannel;
+		const channel = this.container.client.channels.cache.get(process.env.MODLOG_CHANNEL_ID) as TextChannel;
 		const kickedUser = await this.container.client.users.fetch(vote.user_to_kick);
 
 		await channel.send({
 			embeds: [
-				new MessageEmbed()
-					.setColor('BLURPLE')
+				new EmbedBuilder()
+					.setColor('Blurple')
 					.setDescription(
 						[
 							`Vote started by: **${await fetchReadableUser(vote.started_by)}**`,
@@ -190,7 +190,7 @@ export class HandleVoteResult extends Task {
 							`Action taken: **${FinalAction[finalAction]}**`,
 						].join('\n'),
 					)
-					.setThumbnail(kickedUser.displayAvatarURL({ dynamic: true, size: 256, format: 'png' }))
+					.setThumbnail(kickedUser.displayAvatarURL({ size: 256, extension: 'png' }))
 					.setFooter({ text: 'Started at' })
 					.setTimestamp(vote.created_at),
 			],

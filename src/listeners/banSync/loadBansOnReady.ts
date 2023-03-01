@@ -130,7 +130,7 @@ export class LoadBansOnReady extends Listener {
 					);
 
 					await guild.bans.create(id, {
-						days: 0,
+						deleteMessageSeconds: 0,
 						reason: `BAN SYNC(${bannedIn}): ${ban.reason ?? 'No reason provided'}`,
 					});
 				}

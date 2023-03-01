@@ -3,7 +3,7 @@ import '@sapphire/plugin-logger/register';
 import { ApplicationCommandRegistries, LogLevel, RegisterBehavior } from '@sapphire/framework';
 import { Time } from '@sapphire/time-utilities';
 import { createColors } from 'colorette';
-import { Intents, Options } from 'discord.js';
+import { ActivityType, IntentsBitField, Options, Partials } from 'discord.js';
 import { inspect } from 'util';
 import { UtilsBot } from './lib/UtilsBot.js';
 
@@ -17,20 +17,19 @@ const client = new UtilsBot({
 		activities: [
 			{
 				name: 'with tools!',
-				type: 'PLAYING',
+				type: ActivityType.Playing,
 			},
 		],
 	},
-	restTimeOffset: 0,
-	intents: new Intents([
-		Intents.FLAGS.GUILDS,
-		Intents.FLAGS.GUILD_MEMBERS,
-		Intents.FLAGS.GUILD_BANS,
-		Intents.FLAGS.GUILD_MESSAGES,
-		Intents.FLAGS.GUILD_VOICE_STATES,
-		Intents.FLAGS.DIRECT_MESSAGES,
+	intents: new IntentsBitField([
+		IntentsBitField.Flags.Guilds,
+		IntentsBitField.Flags.GuildMembers,
+		IntentsBitField.Flags.GuildBans,
+		IntentsBitField.Flags.GuildMessages,
+		IntentsBitField.Flags.GuildVoiceStates,
+		IntentsBitField.Flags.DirectMessages,
 	]),
-	partials: ['CHANNEL', 'MESSAGE'],
+	partials: [Partials.Channel, Partials.Message],
 	caseInsensitiveCommands: true,
 	loadMessageCommandListeners: true,
 	logger: {

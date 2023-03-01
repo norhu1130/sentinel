@@ -2,7 +2,7 @@
 
 import { ApplyOptions } from '@sapphire/decorators';
 import { InteractionHandler, InteractionHandlerTypes, Result } from '@sapphire/framework';
-import { ButtonInteraction, MessageEmbed } from 'discord.js';
+import { ButtonInteraction, EmbedBuilder, Message } from 'discord.js';
 import { createInfoEmbed } from '../lib/utils/createInfoEmbed.js';
 import { generatePollEmbedDescription } from '../lib/utils/polls/generatePollEmbed.js';
 
@@ -155,7 +155,7 @@ export class PollButtonHandler extends InteractionHandler {
 
 				await this.updatePollMessage(interaction, poll.id);
 
-				await interaction.followUp({
+				return interaction.followUp({
 					embeds: [
 						createInfoEmbed(`You voted for option number **${numericIndex + 1}**: ${poll.options[numericIndex]}`),
 					],
@@ -175,11 +175,11 @@ export class PollButtonHandler extends InteractionHandler {
 		const newDescription = generatePollEmbedDescription(poll, false);
 
 		const originalMessage = (
-			await Result.fromAsync(() => interaction.channel!.messages.fetch(interaction.message.id))
+			await Result.fromAsync(() => interaction.channel!.messages.fetch(interaction.message.id) as Promise<Message>)
 		).unwrapOr(null);
 
 		if (originalMessage) {
-			const newEmbed = new MessageEmbed(originalMessage.embeds[0]);
+			const newEmbed = EmbedBuilder.from(originalMessage.embeds[0]);
 			newEmbed.setDescription(newDescription);
 
 			await interaction.update({

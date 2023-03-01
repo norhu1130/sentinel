@@ -40,7 +40,7 @@ export class CheckAutoPins extends Task {
 			let msg: Message | undefined;
 
 			try {
-				const lastMessages = await channel.messages.fetch({ limit: 1 }, { cache: false, force: true });
+				const lastMessages = await channel.messages.fetch({ limit: 1, cache: false });
 
 				msg = lastMessages.first();
 			} catch (err) {

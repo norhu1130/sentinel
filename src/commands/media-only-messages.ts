@@ -26,7 +26,7 @@ export class MediaOnlyMessagesCommand extends Subcommand {
 		},
 	];
 
-	public async enableSubcommand(interaction: Subcommand.ChatInputInteraction<'cached'>) {
+	public async enableSubcommand(interaction: Subcommand.ChatInputCommandInteraction<'cached'>) {
 		const channel = interaction.options.getChannel('channel', true);
 
 		const existent = await this.container.prisma.messageOnlyChannel.findFirst({
@@ -55,7 +55,7 @@ export class MediaOnlyMessagesCommand extends Subcommand {
 		});
 	}
 
-	public async disableSubcommand(interaction: Subcommand.ChatInputInteraction<'cached'>) {
+	public async disableSubcommand(interaction: Subcommand.ChatInputCommandInteraction<'cached'>) {
 		const channel = interaction.options.getChannel('channel', true);
 
 		const existent = await this.container.prisma.messageOnlyChannel.findFirst({
@@ -86,7 +86,7 @@ export class MediaOnlyMessagesCommand extends Subcommand {
 		});
 	}
 
-	public async listSubcommand(interaction: Subcommand.ChatInputInteraction<'cached'>) {
+	public async listSubcommand(interaction: Subcommand.ChatInputCommandInteraction<'cached'>) {
 		const channels = await this.container.prisma.messageOnlyChannel.findMany({
 			where: { guild_id: interaction.guildId },
 		});

@@ -1,8 +1,8 @@
 import { container } from '@sapphire/framework';
-import { MessageEmbed } from 'discord.js';
+import { EmbedBuilder } from 'discord.js';
 
 export function createInfoEmbed(message: string) {
-	return new MessageEmbed()
+	return new EmbedBuilder()
 		.setTitle(container.client.user!.username)
 		.setDescription(message)
 		.setTimestamp()

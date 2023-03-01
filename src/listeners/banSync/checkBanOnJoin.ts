@@ -48,7 +48,7 @@ export class CheckBanOnJoin extends Listener {
 		);
 
 		await guild.bans.create(member.id, {
-			days: 0,
+			deleteMessageSeconds: 0,
 			reason: `BAN SYNC(${bannedFrom}): ${banInfo.reason ?? 'No reason'}`,
 		});
 	}

@@ -29,7 +29,7 @@ export class RoleSyncCommand extends Subcommand {
 		},
 	];
 
-	public async addSubcommand(interaction: Subcommand.ChatInputInteraction<'cached'>) {
+	public async addSubcommand(interaction: Subcommand.ChatInputCommandInteraction<'cached'>) {
 		const rawOriginServer = interaction.options.getString('origin_server', true);
 		const rawOriginRole = interaction.options.getString('origin_role', true);
 		const roleInThisServer = interaction.options.getRole('role_in_this_server', true);
@@ -144,12 +144,12 @@ export class RoleSyncCommand extends Subcommand {
 			}
 		}
 
-		await interaction.followUp({
+		return interaction.followUp({
 			embeds: [createInfoEmbed('Finished processing possible role syncs for the newly added role sync entry.')],
 		});
 	}
 
-	public async removeSubcommand(interaction: Subcommand.ChatInputInteraction<'cached'>) {
+	public async removeSubcommand(interaction: Subcommand.ChatInputCommandInteraction<'cached'>) {
 		const rawRoleSyncEntry = interaction.options.getString('role_sync', true);
 		const resolvedFilter = this._resolveRoleSyncDataFromRoleSyncOption(rawRoleSyncEntry);
 
@@ -194,7 +194,7 @@ export class RoleSyncCommand extends Subcommand {
 		});
 	}
 
-	public async listSubcommand(interaction: Subcommand.ChatInputInteraction<'cached'>) {
+	public async listSubcommand(interaction: Subcommand.ChatInputCommandInteraction<'cached'>) {
 		const roleSyncs = await this.container.prisma.roleSync.findMany({
 			where: { destination_guild_id: interaction.guildId },
 		});
@@ -252,7 +252,7 @@ export class RoleSyncCommand extends Subcommand {
 			);
 		}
 
-		await paginated.run(interaction);
+		return paginated.run(interaction);
 	}
 
 	public async autocompleteRun(interaction: Subcommand.AutocompleteInteraction<'cached'>) {

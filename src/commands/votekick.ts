@@ -2,12 +2,13 @@ import { time } from '@discordjs/builders';
 import { Command } from '@sapphire/framework';
 import { Time } from '@sapphire/time-utilities';
 import {
-	CommandInteraction,
+	ActionRowBuilder,
+	ButtonBuilder,
+	ButtonStyle,
+	ChatInputCommandInteraction,
+	EmbedBuilder,
 	GuildMember,
 	Message,
-	MessageActionRow,
-	MessageButton,
-	MessageEmbed,
 	VoiceChannel,
 } from 'discord.js';
 import { UserError } from '../lib/extensions/UserError.js';
@@ -27,7 +28,7 @@ export class VoteKick extends Command {
 		await message.channel.send({
 			content: 'VOTE_COMMAND_CANNOT_RUN_OUTSIDE_GUILD_MESSAGE',
 			embeds: [
-				new MessageEmbed().setColor('RED').setDescription('Cannot run this command outside of a guild channel!'),
+				new EmbedBuilder().setColor('Red').setDescription('Cannot run this command outside of a guild channel!'),
 			],
 		});
 
@@ -36,8 +37,8 @@ export class VoteKick extends Command {
 		await message.channel.send({
 			content: 'VOTE_COMMAND_NEED_TO_BE_IN_VOICE_CHANNEL_MESSAGE',
 			embeds: [
-				new MessageEmbed()
-					.setColor('RED')
+				new EmbedBuilder()
+					.setColor('Red')
 					.setDescription('You need to be in a voice channel to be able to use this command!'),
 			],
 		});
@@ -47,7 +48,7 @@ export class VoteKick extends Command {
 		await message.channel.send({
 			content: 'VOTE_COMMAND_CHANNEL_LIMIT_IS_TOO_SMALL_MESSAGE',
 			embeds: [
-				new MessageEmbed().setColor('RED').setDescription('You cannot run this command in such a small voice channel!'),
+				new EmbedBuilder().setColor('Red').setDescription('You cannot run this command in such a small voice channel!'),
 			],
 		});
 
@@ -56,8 +57,8 @@ export class VoteKick extends Command {
 		await message.channel.send({
 			content: 'VOTE_COMMAND_CHANNEL_HAS_TOO_FEW_MEMBERS_MESSAGE',
 			embeds: [
-				new MessageEmbed()
-					.setColor('RED')
+				new EmbedBuilder()
+					.setColor('Red')
 					.setDescription("There aren't enough members in this voice channel to start a vote!"),
 			],
 		});
@@ -66,7 +67,7 @@ export class VoteKick extends Command {
 		// commands/votekick.ts, m:slashCommand, l:257
 		await message.channel.send({
 			content: 'VOTE_COMMAND_USER_TO_KICK_IS_NOT_IN_VOICE_CHANNEL_MESSAGE',
-			embeds: [new MessageEmbed().setColor('RED').setDescription("That user is not in the voice channel you're in!")],
+			embeds: [new EmbedBuilder().setColor('Red').setDescription("That user is not in the voice channel you're in!")],
 		});
 
 		// User cannot kick themselves
@@ -74,8 +75,8 @@ export class VoteKick extends Command {
 		await message.channel.send({
 			content: 'VOTE_COMMAND_USER_TO_KICK_CANNOT_BE_INVOKER_MESSAGE',
 			embeds: [
-				new MessageEmbed()
-					.setColor('RED')
+				new EmbedBuilder()
+					.setColor('Red')
 					.setDescription('You cannot start a vote kick for yourself! Just press the disconnect button instead.'),
 			],
 		});
@@ -85,19 +86,19 @@ export class VoteKick extends Command {
 		await message.channel.send({
 			content: 'VOTE_ALREADY_PRESENT_MESSAGE',
 			embeds: [
-				new MessageEmbed()
-					.setColor('RED')
+				new EmbedBuilder()
+					.setColor('Red')
 					.setDescription(
 						`A vote to kick **Example User#0000 (1)** was already started.\n\nClick the button below to jump to that message`,
 					)
-					.setThumbnail(this.container.client.user!.displayAvatarURL({ dynamic: true, size: 256, format: 'png' })),
+					.setThumbnail(this.container.client.user!.displayAvatarURL({ size: 256, extension: 'png' })),
 			],
 			components: [
-				new MessageActionRow().addComponents(
-					new MessageButton() //
+				new ActionRowBuilder<ButtonBuilder>().addComponents(
+					new ButtonBuilder() //
 						.setURL(message.url)
 						.setLabel('Jump to message')
-						.setStyle('LINK'),
+						.setStyle(ButtonStyle.Link),
 				),
 			],
 		});
@@ -107,26 +108,26 @@ export class VoteKick extends Command {
 		await message.channel.send({
 			content: 'VOTE_STARTED_OR_RUNNING_MESSAGE',
 			embeds: [
-				new MessageEmbed() //
-					.setColor('BLURPLE')
+				new EmbedBuilder() //
+					.setColor('Blurple')
 					.setDescription(`A vote to kick **Example User#0000 (1)** was started!`)
 					.addFields(
 						{ name: 'Members agreeing with vote', value: '1', inline: true },
 						{ name: 'Members disagreeing with vote', value: '1', inline: true },
 					)
-					.setFooter(`This vote needs <COUNT OF MINIMUM VOTES IN ONE DIRECTION> votes to pass.`)
-					.setThumbnail(this.container.client.user!.displayAvatarURL({ dynamic: true, size: 256, format: 'png' })),
+					.setFooter({ text: `This vote needs <COUNT OF MINIMUM VOTES IN ONE DIRECTION> votes to pass.` })
+					.setThumbnail(this.container.client.user!.displayAvatarURL({ size: 256, extension: 'png' })),
 			],
 			components: [
-				new MessageActionRow().addComponents(
-					new MessageButton()
+				new ActionRowBuilder<ButtonBuilder>().addComponents(
+					new ButtonBuilder()
 						.setCustomId('ignored')
-						.setStyle('SECONDARY')
+						.setStyle(ButtonStyle.Secondary)
 						.setLabel('Agree with vote')
 						.setEmoji('check:889466938433101835'),
-					new MessageButton()
+					new ButtonBuilder()
 						.setCustomId('ignored-2')
-						.setStyle('SECONDARY')
+						.setStyle(ButtonStyle.Secondary)
 						.setLabel('Disagree with vote')
 						.setEmoji('❌'),
 				),
@@ -137,14 +138,14 @@ export class VoteKick extends Command {
 		// listeners/interactions/buttonPresses.ts, l:45-48
 		await message.channel.send({
 			content: 'VOTE_CANNOT_CAST_SAME_VOTE_MESSAGE',
-			embeds: [new MessageEmbed().setColor('RED').setDescription('You cannot cast the same vote!')],
+			embeds: [new EmbedBuilder().setColor('Red').setDescription('You cannot cast the same vote!')],
 		});
 
 		// Vote was registered
 		// listeners/interactions/buttonPresses.ts, l:107-110
 		await message.channel.send({
 			content: 'VOTE_REGISTERED_MESSAGE',
-			embeds: [new MessageEmbed().setColor('GREEN').setDescription('Your vote was casted successfully')],
+			embeds: [new EmbedBuilder().setColor('Green').setDescription('Your vote was casted successfully')],
 		});
 
 		// Tied vote
@@ -152,8 +153,8 @@ export class VoteKick extends Command {
 		await message.channel.send({
 			content: 'VOTE_FINISHED_TIE_MESSAGE',
 			embeds: [
-				new MessageEmbed()
-					.setColor('YELLOW')
+				new EmbedBuilder()
+					.setColor('Yellow')
 					.setDescription(
 						[
 							`The vote to kick **Example User#0000 (1)** ended!`,
@@ -169,7 +170,7 @@ export class VoteKick extends Command {
 							inline: true,
 						},
 					)
-					.setThumbnail(this.container.client.user!.displayAvatarURL({ dynamic: true, size: 256, format: 'png' })),
+					.setThumbnail(this.container.client.user!.displayAvatarURL({ size: 256, extension: 'png' })),
 			],
 		});
 
@@ -178,8 +179,8 @@ export class VoteKick extends Command {
 		await message.channel.send({
 			content: 'VOTE_FINISHED_PROCEED_MESSAGE',
 			embeds: [
-				new MessageEmbed()
-					.setColor('GREEN')
+				new EmbedBuilder()
+					.setColor('Green')
 					.setDescription(
 						[
 							`The vote to kick **Example User#0000 (1)** ended!`,
@@ -195,7 +196,7 @@ export class VoteKick extends Command {
 							inline: true,
 						},
 					)
-					.setThumbnail(this.container.client.user!.displayAvatarURL({ dynamic: true, size: 256, format: 'png' })),
+					.setThumbnail(this.container.client.user!.displayAvatarURL({ size: 256, extension: 'png' })),
 			],
 		});
 
@@ -204,8 +205,8 @@ export class VoteKick extends Command {
 		await message.channel.send({
 			content: 'VOTE_FINISHED_IGNORE_MESSAGE',
 			embeds: [
-				new MessageEmbed()
-					.setColor('RED')
+				new EmbedBuilder()
+					.setColor('Red')
 					.setDescription(
 						[
 							`The vote to kick **Example User#0000 (1)** ended!`,
@@ -221,7 +222,7 @@ export class VoteKick extends Command {
 							inline: true,
 						},
 					)
-					.setThumbnail(this.container.client.user!.displayAvatarURL({ dynamic: true, size: 256, format: 'png' })),
+					.setThumbnail(this.container.client.user!.displayAvatarURL({ size: 256, extension: 'png' })),
 			],
 		});
 
@@ -230,8 +231,8 @@ export class VoteKick extends Command {
 		await message.channel.send({
 			content: 'MODLOG_ENTRY',
 			embeds: [
-				new MessageEmbed()
-					.setColor('BLURPLE')
+				new EmbedBuilder()
+					.setColor('Blurple')
 					.setDescription(
 						[
 							`Vote started by: **Example User#0000 (1)**`,
@@ -244,8 +245,8 @@ export class VoteKick extends Command {
 							`Action taken: **NotEnoughVotes OR Kick OR Ignore**`,
 						].join('\n'),
 					)
-					.setThumbnail(this.container.client.user!.displayAvatarURL({ dynamic: true, size: 256, format: 'png' }))
-					.setFooter('Started at')
+					.setThumbnail(this.container.client.user!.displayAvatarURL({ size: 256, extension: 'png' }))
+					.setFooter({ text: 'Started at' })
 					.setTimestamp(),
 			],
 		});
@@ -255,8 +256,8 @@ export class VoteKick extends Command {
 		await message.channel.send({
 			content: 'MEMBER_TIMED_OUT_TEMPORARILY_DM',
 			embeds: [
-				new MessageEmbed()
-					.setColor('RED')
+				new EmbedBuilder()
+					.setColor('Red')
 					.setDescription(
 						`You have been timed out from voice channels. You will be unmuted at ${time(new Date(), 'T')}`,
 					),
@@ -268,8 +269,8 @@ export class VoteKick extends Command {
 		await message.channel.send({
 			content: 'MEMBER_TIMED_OUT_PERMANENTLY_DM',
 			embeds: [
-				new MessageEmbed()
-					.setColor('RED')
+				new EmbedBuilder()
+					.setColor('Red')
 					.setDescription(
 						'You have been timed out permanently from voice channels. Please contact ModMail to appeal this.',
 					),
@@ -279,7 +280,7 @@ export class VoteKick extends Command {
 		throw new UserError('Cannot run this command outside slash commands! Use `/votekick` instead.');
 	}
 
-	public override async chatInputRun(interaction: CommandInteraction) {
+	public override async chatInputRun(interaction: ChatInputCommandInteraction) {
 		// If command is ran in DMs, throw
 		if (!interaction.guildId) throw new UserError('Cannot run this command outside of a guild channel!');
 
@@ -340,8 +341,8 @@ export class VoteKick extends Command {
 			await interaction.reply({
 				ephemeral: true,
 				embeds: [
-					new MessageEmbed()
-						.setColor('RED')
+					new EmbedBuilder()
+						.setColor('Red')
 						.setDescription(
 							`You can run this command again **${time(new Date(cooldownEntry?.expiresAt ?? now), 'R')}**`,
 						),

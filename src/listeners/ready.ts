@@ -1,7 +1,7 @@
 import { ApplyOptions } from '@sapphire/decorators';
 import { Listener, ListenerOptions } from '@sapphire/framework';
 import { cyanBright, green, magenta } from 'colorette';
-import { PermissionFlagsBits } from 'discord-api-types/v10';
+import { OAuth2Scopes, PermissionFlagsBits } from 'discord-api-types/v10';
 import { loadMediaOnlyChannels } from '../lib/utils/caches/mediaOnlyCache.js';
 
 @ApplyOptions<ListenerOptions>({
@@ -16,7 +16,7 @@ export class ReadyEvent extends Listener {
 		logger.info(magenta(`Logged in as ${cyanBright(user!.tag)} (${green(user!.id)})`));
 
 		const invite = client.generateInvite({
-			scopes: ['applications.commands', 'bot'],
+			scopes: [OAuth2Scopes.ApplicationsCommands, OAuth2Scopes.Bot],
 			permissions: [PermissionFlagsBits.BanMembers, PermissionFlagsBits.ManageMessages],
 		});
 

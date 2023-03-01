@@ -1,10 +1,22 @@
 import type { Prisma, VoteKick } from '@prisma/client';
 import { container } from '@sapphire/framework';
 import { Time } from '@sapphire/time-utilities';
-import { CommandInteraction, MessageActionRow, MessageButton, MessageEmbed, User, VoiceChannel } from 'discord.js';
+import {
+	ActionRowBuilder,
+	ButtonBuilder,
+	ButtonStyle,
+	ChatInputCommandInteraction,
+	EmbedBuilder,
+	User,
+	VoiceChannel,
+} from 'discord.js';
 import { getMessageUrlFromInteractionResponse, toReadableUser } from '../utils.js';
 
-export async function createVoteKick(interaction: CommandInteraction, userToKick: User, voiceChannel: VoiceChannel) {
+export async function createVoteKick(
+	interaction: ChatInputCommandInteraction,
+	userToKick: User,
+	voiceChannel: VoiceChannel,
+) {
 	const reason = interaction.options.getString('reason', true);
 
 	const data: Prisma.VoteKickCreateInput = {
@@ -34,26 +46,26 @@ export async function createVoteKick(interaction: CommandInteraction, userToKick
 	const result = await interaction.reply({
 		content: memberIds.map((id) => `<@${id}>`).join(', '),
 		embeds: [
-			new MessageEmbed() //
-				.setColor('BLURPLE')
+			new EmbedBuilder() //
+				.setColor('Blurple')
 				.setDescription(`A vote to kick **${toReadableUser(userToKick)}** was started!\n\nReason: ${reason}`)
 				.addFields(
 					{ name: 'Members agreeing with vote', value: '1', inline: true },
 					{ name: 'Members disagreeing with vote', value: '1', inline: true },
 				)
 				.setFooter({ text: `This vote needs ${finalAmount} votes to pass.` })
-				.setThumbnail(userToKick.displayAvatarURL({ dynamic: true, size: 256, format: 'png' })),
+				.setThumbnail(userToKick.displayAvatarURL({ size: 256, extension: 'png' })),
 		],
 		components: [
-			new MessageActionRow().addComponents(
-				new MessageButton()
+			new ActionRowBuilder<ButtonBuilder>().addComponents(
+				new ButtonBuilder()
 					.setCustomId(generateButtonId('yes', userToKick.id, voiceChannel.id))
-					.setStyle('SECONDARY')
+					.setStyle(ButtonStyle.Secondary)
 					.setLabel('Agree with vote')
 					.setEmoji('check:889466938433101835'),
-				new MessageButton()
+				new ButtonBuilder()
 					.setCustomId(generateButtonId('no', userToKick.id, voiceChannel.id))
-					.setStyle('SECONDARY')
+					.setStyle(ButtonStyle.Secondary)
 					.setLabel('Disagree with vote')
 					.setEmoji('❌'),
 			),
@@ -82,28 +94,28 @@ export async function createVoteKick(interaction: CommandInteraction, userToKick
 }
 
 export async function announceAlreadyStartedVoteKick(
-	interaction: CommandInteraction,
+	interaction: ChatInputCommandInteraction,
 	userToKick: User,
 	kick: VoteKick,
 ) {
 	await interaction.reply({
 		ephemeral: true,
 		embeds: [
-			new MessageEmbed()
-				.setColor('RED')
+			new EmbedBuilder()
+				.setColor('Red')
 				.setDescription(
 					`A vote to kick **${toReadableUser(
 						userToKick,
 					)}** was already started.\n\nClick the button below to jump to that message`,
 				)
-				.setThumbnail(userToKick.displayAvatarURL({ dynamic: true, size: 256, format: 'png' })),
+				.setThumbnail(userToKick.displayAvatarURL({ size: 256, extension: 'png' })),
 		],
 		components: [
-			new MessageActionRow().addComponents(
-				new MessageButton() //
+			new ActionRowBuilder<ButtonBuilder>().addComponents(
+				new ButtonBuilder() //
 					.setURL(kick.message_url)
 					.setLabel('Jump to message')
-					.setStyle('LINK'),
+					.setStyle(ButtonStyle.Link),
 			),
 		],
 	});

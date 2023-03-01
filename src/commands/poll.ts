@@ -4,8 +4,8 @@ import { ApplyOptions } from '@sapphire/decorators';
 import { Subcommand, SubcommandMappingArray } from '@sapphire/plugin-subcommands';
 import { Duration } from '@sapphire/time-utilities';
 import { chunk } from '@sapphire/utilities';
-import { PermissionFlagsBits } from 'discord-api-types/v10';
-import { Constants, MessageActionRow, MessageButton } from 'discord.js';
+import { ButtonStyle, PermissionFlagsBits } from 'discord-api-types/v10';
+import { ActionRowBuilder, ButtonBuilder } from 'discord.js';
 import { createInfoEmbed } from '../lib/utils/createInfoEmbed.js';
 import { generatePollEmbedDescription } from '../lib/utils/polls/generatePollEmbed.js';
 import { trimPretty } from '../lib/utils/trim.js';
@@ -22,7 +22,7 @@ export class PollCommand extends Subcommand {
 		},
 	];
 
-	public async createSubcommand(interaction: Subcommand.ChatInputInteraction<'cached'>) {
+	public async createSubcommand(interaction: Subcommand.ChatInputCommandInteraction<'cached'>) {
 		const question = interaction.options.getString('question', true);
 		const rawEndsAfter = interaction.options.getString('ends_after', true);
 
@@ -108,32 +108,35 @@ export class PollCommand extends Subcommand {
 	}
 
 	private _generatePollComponents(poll: Poll) {
-		const whatsMySelectionButton = new MessageButton()
+		const whatsMySelectionButton = new ButtonBuilder()
 			.setCustomId(`poll.${poll.id}.my_option`)
 			.setLabel('Check my selection')
 			.setEmoji('ℹ️')
-			.setStyle(Constants.MessageButtonStyles.PRIMARY);
+			.setStyle(ButtonStyle.Primary);
 
-		const removeMySelectionButton = new MessageButton()
+		const removeMySelectionButton = new ButtonBuilder()
 			.setCustomId(`poll.${poll.id}.remove_selection`)
 			.setLabel('Remove my selection')
 			.setEmoji('🗑️')
-			.setStyle(Constants.MessageButtonStyles.DANGER);
+			.setStyle(ButtonStyle.Danger);
 
-		const specialActionsRow = new MessageActionRow().setComponents([whatsMySelectionButton, removeMySelectionButton]);
-		const optionRows = [];
+		const specialActionsRow = new ActionRowBuilder<ButtonBuilder>().setComponents([
+			whatsMySelectionButton,
+			removeMySelectionButton,
+		]);
+		const optionRows: ActionRowBuilder<ButtonBuilder>[] = [];
 		let emojiIndex = 1;
 
 		const optionChunks = chunk(poll.options, 4);
 
 		for (const optionChunk of optionChunks) {
-			const row = new MessageActionRow();
+			const row = new ActionRowBuilder<ButtonBuilder>();
 
 			for (const option of optionChunk) {
-				const button = new MessageButton()
+				const button = new ButtonBuilder()
 					.setCustomId(`poll.${poll.id}.select_${emojiIndex - 1}`)
 					.setLabel(trimPretty(option, 78))
-					.setStyle(Constants.MessageButtonStyles.SUCCESS)
+					.setStyle(ButtonStyle.Success)
 					.setEmoji(emojiMap[emojiIndex++ as keyof typeof emojiMap]);
 
 				row.addComponents(button);
