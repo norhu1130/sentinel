@@ -254,10 +254,16 @@ export class AutoPinCommand extends Subcommand {
 								.setDescription('How often should the channel be checked to repost the message (ex.: 1 hour 5 minutes)')
 								.setRequired(true),
 						)
-						.addStringOption((linkButton) =>
-							linkButton
-								.setName('link_button')
+						.addStringOption((buttonLink) =>
+							buttonLink
+								.setName('button_link')
 								.setDescription('If you want the message to have a link button, enter the link it should go to')
+								.setRequired(false),
+						)
+						.addStringOption((buttonLabel) =>
+							buttonLabel
+								.setName('button_label')
+								.setDescription('If you want the message to have a link button, enter the label it should have')
 								.setRequired(false),
 						),
 				)
