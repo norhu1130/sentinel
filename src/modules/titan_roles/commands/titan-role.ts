@@ -50,6 +50,10 @@ export class TitanRoleCommand extends Subcommand {
 			return;
 		}
 
+		await interaction.deferReply({
+			ephemeral: true,
+		});
+
 		const titanMember = await this.container.prisma.titanMember.findFirst({
 			where: { guildId: interaction.guildId, userId: interaction.user.id },
 		});
@@ -64,18 +68,16 @@ export class TitanRoleCommand extends Subcommand {
 		const iconUpload = interaction.options.getAttachment('icon-upload');
 
 		if (!oldRole && !name) {
-			await interaction.reply({
+			await interaction.editReply({
 				embeds: [createInfoEmbed('You do not have a custom Titan role. Please provide a name to create one!')],
-				ephemeral: true,
 			});
 
 			return;
 		}
 
 		if (iconUpload && iconUrl) {
-			await interaction.reply({
+			await interaction.editReply({
 				embeds: [createInfoEmbed('You cannot provide both an icon URL and an icon upload.')],
-				ephemeral: true,
 			});
 
 			return;
@@ -84,9 +86,8 @@ export class TitanRoleCommand extends Subcommand {
 		const color = rawColor ? this.parseColor(rawColor) : undefined;
 
 		if (color === null) {
-			await interaction.reply({
+			await interaction.editReply({
 				embeds: [createInfoEmbed('Invalid color provided. Please provide a valid hexadecimal color.')],
-				ephemeral: true,
 			});
 
 			return;
@@ -122,13 +123,12 @@ export class TitanRoleCommand extends Subcommand {
 					}),
 				);
 
-				await interaction.reply({
+				await interaction.editReply({
 					embeds: [
 						createInfoEmbed(
 							`Your custom Titan role color is too similar to the staff roles. Please choose a different color.`,
 						),
 					],
-					ephemeral: true,
 				});
 
 				return;
@@ -140,7 +140,7 @@ export class TitanRoleCommand extends Subcommand {
 			color: color ?? oldRole?.color,
 			hoist: false,
 			// Only set position when creating, as this requires moving roles around, which at Valorant's scale means a fuck ton of events sent to everyone :>
-			position: oldRole ? position : undefined,
+			position: oldRole ? undefined : position,
 			mentionable: false,
 			permissions: [],
 			reason: 'Custom Titan role',
@@ -150,9 +150,8 @@ export class TitanRoleCommand extends Subcommand {
 			const icon = await this.resolveIcon(iconUrl ?? iconUpload?.url);
 
 			if (icon === null) {
-				await interaction.reply({
+				await interaction.editReply({
 					embeds: [createInfoEmbed('Invalid icon provided. Please provide a valid PNG or JPEG icon.')],
-					ephemeral: true,
 				});
 
 				return;
@@ -178,7 +177,7 @@ export class TitanRoleCommand extends Subcommand {
 				},
 			});
 
-			await interaction.reply({
+			await interaction.editReply({
 				embeds: [
 					createInfoEmbed(
 						oldRole ?
@@ -186,7 +185,6 @@ export class TitanRoleCommand extends Subcommand {
 						:	`Your custom Titan role has been created.`,
 					),
 				],
-				ephemeral: true,
 			});
 		} catch (error) {
 			this.container.logger.error(`Failed to edit/create custom Titan role`, {
@@ -195,13 +193,12 @@ export class TitanRoleCommand extends Subcommand {
 				error,
 			});
 
-			await interaction.reply({
+			await interaction.editReply({
 				embeds: [
 					createInfoEmbed(
 						'I was unable to create/edit your custom Titan role. If this persists, please contact the admins.',
 					),
 				],
-				ephemeral: true,
 			});
 		}
 	}
