@@ -9,6 +9,19 @@ import { makeTitanRoleGiftSwitchId } from '../interaction-handlers/switch-gift.j
 // tolerance will be something that we need to definitely tweak over time. Right now it's pretty loose, you need to be reaaal close to the staff colors to be rejected
 const kTolerance = 5;
 
+const forbiddenColors = (): ColorMatch[] => [
+	{
+		color: 0xffffff,
+		matched: false,
+		roleName: 'Purest day',
+	},
+	{
+		color: 0x000000,
+		matched: false,
+		roleName: 'Darkest night',
+	},
+];
+
 export class TitanRoleCommand extends Subcommand {
 	public subcommandMappings: SubcommandMappingArray = [
 		{
@@ -95,21 +108,23 @@ export class TitanRoleCommand extends Subcommand {
 		}
 
 		if (color) {
-			const staffColors: ColorMatch[] = guildConfig.staffRoles
-				.map((id) => {
-					const role = interaction.guild.roles.cache.get(id);
+			const staffColors: ColorMatch[] = (
+				guildConfig.staffRoles
+					.map((id) => {
+						const role = interaction.guild.roles.cache.get(id);
 
-					if (!role) {
-						return null;
-					}
+						if (!role) {
+							return null;
+						}
 
-					return {
-						color: role.color,
-						matched: false,
-						roleName: role.name,
-					};
-				})
-				.filter((role) => role !== null) as ColorMatch[];
+						return {
+							color: role.color,
+							matched: false,
+							roleName: role.name,
+						};
+					})
+					.filter((role) => role !== null) as ColorMatch[]
+			).concat(forbiddenColors());
 
 			this.similarityInColors(color, staffColors);
 
