@@ -463,7 +463,7 @@ export class TitanRoleCommand extends Subcommand {
 
 		if (raw.startsWith('#')) {
 			numericParse = Number.parseInt(raw.slice(1), 16);
-		} else if (raw.startsWith('0x')) {
+		} else {
 			numericParse = Number.parseInt(raw, 16);
 		}
 
