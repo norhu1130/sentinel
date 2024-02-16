@@ -1,10 +1,12 @@
 import { Buffer } from 'node:buffer';
 import { Subcommand, type SubcommandMappingArray } from '@sapphire/plugin-subcommands';
-import { ActionRowBuilder, ButtonBuilder, ButtonStyle, type RoleEditOptions } from 'discord.js';
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle, time, type RoleEditOptions, TimestampStyles } from 'discord.js';
 import looksSame, { type Color } from 'looks-same';
 import magicBytes from 'magic-bytes.js';
 import { createInfoEmbed } from '../../../lib/utils/createInfoEmbed.js';
 import { makeTitanRoleGiftSwitchId } from '../interaction-handlers/switch-gift.js';
+
+const thirtyMinutes = 1_000 * 60 * 30;
 
 // tolerance will be something that we need to definitely tweak over time. Right now it's pretty loose, you need to be reaaal close to the staff colors to be rejected
 const kTolerance = 5;
@@ -347,6 +349,23 @@ export class TitanRoleCommand extends Subcommand {
 			return;
 		}
 
+		if (titanMember?.giftingCooldown) {
+			const now = Date.now();
+
+			if (now < titanMember.giftingCooldown.getTime()) {
+				await interaction.reply({
+					embeds: [
+						createInfoEmbed(
+							`You'll be able to gift or transfer the Legend Subscription ${time(titanMember.giftingCooldown, TimestampStyles.RelativeTime)}`,
+						),
+					],
+					ephemeral: true,
+				});
+
+				return;
+			}
+		}
+
 		// If they haven't gifted a role before, we can just gift it
 		if (!titanMember?.giftedRoleToUserId) {
 			try {
@@ -372,8 +391,13 @@ export class TitanRoleCommand extends Subcommand {
 
 			await this.container.prisma.titanMember.upsert({
 				where: { guildId_userId: { guildId: interaction.guildId, userId: interaction.user.id } },
-				update: { giftedRoleToUserId: user.id },
-				create: { guildId: interaction.guildId, userId: interaction.user.id, giftedRoleToUserId: user.id },
+				update: { giftedRoleToUserId: user.id, giftingCooldown: new Date(Date.now() + thirtyMinutes) },
+				create: {
+					guildId: interaction.guildId,
+					userId: interaction.user.id,
+					giftedRoleToUserId: user.id,
+					giftingCooldown: new Date(Date.now() + thirtyMinutes),
+				},
 			});
 
 			await interaction.reply({

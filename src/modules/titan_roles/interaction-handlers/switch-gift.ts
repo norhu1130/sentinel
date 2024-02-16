@@ -7,6 +7,8 @@ export function makeTitanRoleGiftSwitchId(originalUser: string, newUser: string,
 	return `titan-role-switch:${originalUser}:${newUser}:${action}` as const;
 }
 
+const thirtyMinutes = 1_000 * 60 * 30;
+
 @ApplyOptions<InteractionHandler.Options>({
 	interactionHandlerType: InteractionHandlerTypes.Button,
 })
@@ -84,7 +86,7 @@ export class SwitchGiftedRole extends InteractionHandler {
 
 		await this.container.prisma.titanMember.update({
 			where: { guildId_userId: { guildId: interaction.guildId, userId: data.originalUser } },
-			data: { giftedRoleToUserId: data.newUser },
+			data: { giftedRoleToUserId: data.newUser, giftingCooldown: new Date(Date.now() + thirtyMinutes) },
 		});
 
 		await interaction.update({

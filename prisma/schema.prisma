@@ -225,6 +225,8 @@ model TitanMember {
   customRoleId       String?
   giftedRoleToUserId String?
 
+  giftingCooldown DateTime?
+
   @@id([guildId, userId])
   @@map("titan_members")
 }
