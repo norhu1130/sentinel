@@ -57,6 +57,8 @@ export class ClanInvite extends InteractionHandler {
 			return;
 		}
 
+		await interaction.deferUpdate();
+
 		const clanOwner = await interaction.guild.members.fetch(data.clanOwner).catch(() => {});
 
 		if (!clanOwner) {
