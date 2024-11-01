@@ -345,6 +345,7 @@ export class ClanManager {
             return ClanMemberAddStatus.InvitedMemberNotFound;
         }
 
+        const customRoleId = await this.getCustomRoleId();
         const clanChannel = await this.getClanChannel();
         const addedToChannel = await clanChannel?.permissionOverwrites.create(invitedMember, {
             ViewChannel: true,
@@ -359,9 +360,11 @@ export class ClanManager {
                 clanGuildId: clan.guildId,
                 clanCustomRoleId: clan.customRoleId,
                 userId: invitedMember.id,
-                claimedRole: false,
+                claimedRole: true,
             },
         });
+
+        await invitedMember.roles.add(customRoleId!);
 
         this.invalidateCache('clanMembers')
 
