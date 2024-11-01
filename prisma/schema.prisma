@@ -260,7 +260,7 @@ model Clan {
   customRoleId String
 
   channelId       String
-  isRoleClaimable Boolean      @default(false)
+  isRoleClaimable Boolean      @default(true)
   members         ClanMember[]
 
   @@id([guildId, customRoleId])
