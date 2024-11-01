@@ -8,7 +8,7 @@ import { RoleAbilitiesCalculator } from '../../../lib/abilities/RoleAbilities.js
 import { createInfoEmbed } from '../../../lib/utils/createEmbed.js';
 
 // tolerance will be something that we need to definitely tweak over time. Right now it's pretty loose, you need to be reaaal close to the staff colors to be rejected
-const kTolerance = 5;
+const kTolerance = 2.5;
 
 const forbiddenColors = (): ColorMatch[] => [
 	{
