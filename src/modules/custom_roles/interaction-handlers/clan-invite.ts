@@ -43,7 +43,7 @@ export class ClanInvite extends InteractionHandler {
 			await interaction.reply({
 				embeds: [createInfoEmbed('This button was not meant for you.')],
 				ephemeral: true,
-			});
+			}).catch(error => this.container.logger.error(`[CLAN] (invite 2.1) Failed to reply to button interaction: ${error}`));
 
 			return;
 		}
@@ -52,7 +52,7 @@ export class ClanInvite extends InteractionHandler {
 			await interaction.update({
 				content: `❌ The invitation was refused.`,
 				components: [],
-			});
+			}).catch(error => this.container.logger.error(`[CLAN] (invite 2.2) Failed to update button interaction: ${error}`));
 
 			return;
 		}
@@ -65,7 +65,7 @@ export class ClanInvite extends InteractionHandler {
 			await interaction.update({
 				content: `❌ This invitation was sent by a member who does not seem to be in the server anymore.`,
 				components: [],
-			});
+			}).catch(error => this.container.logger.error(`[CLAN] (invite 2.3) Failed to update button interaction: ${error}`));
 
 			return;
 		}
@@ -98,7 +98,7 @@ export class ClanInvite extends InteractionHandler {
 			await interaction.update({
 				content: errorMessage,
 				components: [],
-			});
+			}).catch(error => this.container.logger.error(`[CLAN] (invite 2.4) Failed to update button interaction: ${error}`));
 
 			return;
 		}
@@ -106,8 +106,10 @@ export class ClanInvite extends InteractionHandler {
 		await interaction.update({
 			content: `✅ Invitation accepted.`,
 			components: [],
-		});
+		}).catch(error => this.container.logger.error(`[CLAN] (invite 2.5) Failed to update button interaction: ${error}`));
 
-		await (await clanManager.getClanChannel())?.send(`<@${data.invitedUser}> has joined the clan! ${welcomeMessages[Math.floor(Math.random() * welcomeMessages.length)]}`);
+		await (await clanManager.getClanChannel())?.send(
+			`<@${data.invitedUser}> has joined the clan! ${welcomeMessages[Math.floor(Math.random() * welcomeMessages.length)]}`
+		).catch(error => this.container.logger.error(`[CLAN] (invite 2.6) Failed to update button interaction: ${error}`));
 	}
 }
