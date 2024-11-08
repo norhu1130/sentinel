@@ -74,5 +74,9 @@ export class PremiumMemberRemove extends Listener<typeof Events.GuildMemberRemov
 				data: { giftedRoleToUserId: null },
 			});
 		}
+
+		await this.container.prisma.clanMember.deleteMany({
+			where: { clanGuildId: member.guild.id, userId: member.id },
+		});
 	}
 }
