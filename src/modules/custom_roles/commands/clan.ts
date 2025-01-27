@@ -1,18 +1,12 @@
 import { Subcommand, type SubcommandMappingArray } from '@sapphire/plugin-subcommands';
 import { ChannelType } from 'discord-api-types/v10';
-import {
-	ActionRowBuilder,
-	ButtonBuilder,
-	ButtonStyle,
-	Collection,
-	type MessageComponentInteraction
-} from 'discord.js';
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle, Collection, type MessageComponentInteraction } from 'discord.js';
 import {
 	ClanCreationStatus,
 	ClanDeletionStatus,
 	ClanManager,
 	ClanMemberRemoveStatus,
-	MAX_MEMBERS_IN_CLAN
+	MAX_MEMBERS_IN_CLAN,
 } from '../../../lib/abilities/ClanManager.js';
 import { createErrorEmbed, createInfoEmbed } from '../../../lib/utils/createEmbed.js';
 import { waitForButtonConfirm } from '../../../lib/utils/waitForInteraction.js';
@@ -111,9 +105,11 @@ export class ClanCommand extends Subcommand {
 		const clanChannel = await clanManager.getClanChannel();
 
 		await interaction.editReply({
-			embeds: [createInfoEmbed(
-				`# 🎉 Your clan has been created\nSend the first message: <#${clanChannel!.id}>!\n\nYou can invite people using the ${inviteCommand} command.`
-			)],
+			embeds: [
+				createInfoEmbed(
+					`# 🎉 Your clan has been created\nSend the first message: <#${clanChannel!.id}>!\n\nYou can invite people using the ${inviteCommand} command.`,
+				),
+			],
 		});
 	}
 
@@ -130,7 +126,7 @@ export class ClanCommand extends Subcommand {
 				cancelText: 'No',
 				restrictToId: interaction.user.id,
 				collectorTime: 30_000,
-			}
+			},
 		);
 
 		const newInteraction = context as MessageComponentInteraction;
@@ -164,7 +160,9 @@ export class ClanCommand extends Subcommand {
 					break;
 			}
 
-			this.container.logger.error(`[CLAN] ${interaction.member.user.username} failed to delete clan: ${errorMessage}`);
+			this.container.logger.error(
+				`[CLAN] ${interaction.member.user.username} failed to delete clan: ${errorMessage}`,
+			);
 			await newInteraction.editReply({
 				content: '',
 				embeds: [createErrorEmbed(errorMessage)],
@@ -178,9 +176,11 @@ export class ClanCommand extends Subcommand {
 
 		await newInteraction.editReply({
 			content: '',
-			embeds: [createInfoEmbed(
-				`# 🗑️ Your clan has been deleted\nYou can recreate a clan using the ${createCommand} command.`
-			)],
+			embeds: [
+				createInfoEmbed(
+					`# 🗑️ Your clan has been deleted\nYou can recreate a clan using the ${createCommand} command.`,
+				),
+			],
 			components: [],
 		});
 	}
@@ -191,7 +191,9 @@ export class ClanCommand extends Subcommand {
 		const memberToInvite = interaction.options.getMember('member');
 
 		if (!memberToInvite) {
-			this.container.logger.info(`[CLAN] ${interaction.member.user.username} tried to invite a member but the provided member was not found.`);
+			this.container.logger.info(
+				`[CLAN] ${interaction.member.user.username} tried to invite a member but the provided member was not found.`,
+			);
 			await interaction.editReply({
 				embeds: [createErrorEmbed('The provided member could not be found.')],
 				components: [],
@@ -203,7 +205,9 @@ export class ClanCommand extends Subcommand {
 		const cooldownKey = `${interaction.user.id}-${memberToInvite.id}`;
 
 		if (cooldowns.has(cooldownKey) && Date.now() < cooldowns.get(cooldownKey)!) {
-			this.container.logger.info(`[CLAN] ${interaction.member.user.username} tried to invite a member but they were on cooldown.`);
+			this.container.logger.info(
+				`[CLAN] ${interaction.member.user.username} tried to invite a member but they were on cooldown.`,
+			);
 			await interaction.editReply({
 				embeds: [createErrorEmbed(`You can only invite the same member once ${clanInviteDelayString}.`)],
 				components: [],
@@ -219,9 +223,15 @@ export class ClanCommand extends Subcommand {
 		const clanMembers = await clanManager.getDiscordClanMembers();
 
 		if (!invitesChannel) {
-			this.container.logger.info(`[CLAN] ${interaction.member.user.username} tried to invite a member but the invites channel was not configured.`);
+			this.container.logger.info(
+				`[CLAN] ${interaction.member.user.username} tried to invite a member but the invites channel was not configured.`,
+			);
 			await interaction.editReply({
-				embeds: [createErrorEmbed('The invites channel was not configured. Please contact modmail to solve this issue.')],
+				embeds: [
+					createErrorEmbed(
+						'The invites channel was not configured. Please contact modmail to solve this issue.',
+					),
+				],
 				components: [],
 			});
 
@@ -229,7 +239,9 @@ export class ClanCommand extends Subcommand {
 		}
 
 		if (!clan) {
-			this.container.logger.info(`[CLAN] ${interaction.member.user.username} tried to invite a member but they do not own a clan.`);
+			this.container.logger.info(
+				`[CLAN] ${interaction.member.user.username} tried to invite a member but they do not own a clan.`,
+			);
 			await interaction.editReply({
 				embeds: [createErrorEmbed('You do not own a clan.')],
 				components: [],
@@ -239,7 +251,9 @@ export class ClanCommand extends Subcommand {
 		}
 
 		if (clanMembers.size >= MAX_MEMBERS_IN_CLAN) {
-			this.container.logger.info(`[CLAN] ${interaction.member.user.username} tried to invite a member but the clan already has the maximum amount of members.`);
+			this.container.logger.info(
+				`[CLAN] ${interaction.member.user.username} tried to invite a member but the clan already has the maximum amount of members.`,
+			);
 			await interaction.editReply({
 				embeds: [createErrorEmbed('Your clan already has the maximum amount of members.')],
 				components: [],
@@ -249,40 +263,56 @@ export class ClanCommand extends Subcommand {
 		}
 
 		cooldowns.set(cooldownKey, Date.now() + clanInviteCooldown);
-		this.container.logger.info(`[CLAN] ${interaction.member.user.username} invited ${memberToInvite.user.username} to their clan. Sending invitation...`);
+		this.container.logger.info(
+			`[CLAN] ${interaction.member.user.username} invited ${memberToInvite.user.username} to their clan. Sending invitation...`,
+		);
 
-		await invitesChannel.send({
-			content: `**📨 Invitation for ${memberToInvite}**\nYou have been invited to join the clan **${clanName}**!`,
-			components: [
-				new ActionRowBuilder<ButtonBuilder>().addComponents(
-					new ButtonBuilder()
-						.setStyle(ButtonStyle.Danger)
-						.setEmoji('🙅')
-						.setLabel('Refuse')
-						.setCustomId(`clan.invite.refuse:${memberToInvite.id}:${interaction.member.id}`),
-					new ButtonBuilder()
-						.setStyle(ButtonStyle.Primary)
-						.setEmoji('✅')
-						.setLabel('Accept')
-						.setCustomId(`clan.invite.accept:${memberToInvite.id}:${interaction.member.id}`),
-				)
-			]
-		}).catch(error => this.container.logger.info(
-			`[CLAN] ${interaction.member.user.username} tried to invite ${memberToInvite.user.username} but an error occurred when trying to send invitation: ${error}`
-		));
+		await invitesChannel
+			.send({
+				content: `**📨 Invitation for ${memberToInvite}**\nYou have been invited to join the clan **${clanName}**!`,
+				components: [
+					new ActionRowBuilder<ButtonBuilder>().addComponents(
+						new ButtonBuilder()
+							.setStyle(ButtonStyle.Danger)
+							.setEmoji('🙅')
+							.setLabel('Refuse')
+							.setCustomId(`clan.invite.refuse:${memberToInvite.id}:${interaction.member.id}`),
+						new ButtonBuilder()
+							.setStyle(ButtonStyle.Primary)
+							.setEmoji('✅')
+							.setLabel('Accept')
+							.setCustomId(`clan.invite.accept:${memberToInvite.id}:${interaction.member.id}`),
+					),
+				],
+			})
+			.catch((error) =>
+				this.container.logger.info(
+					`[CLAN] ${interaction.member.user.username} tried to invite ${memberToInvite.user.username} but an error occurred when trying to send invitation: ${error}`,
+				),
+			);
 
-		this.container.logger.info(`[CLAN] ${interaction.member.user.username} invited ${memberToInvite.user.username} to their clan. Invitation sent, updating reply...`);
+		this.container.logger.info(
+			`[CLAN] ${interaction.member.user.username} invited ${memberToInvite.user.username} to their clan. Invitation sent, updating reply...`,
+		);
 
-		await interaction.editReply({
-			embeds: [createInfoEmbed(
-				`# 📨 Invitation sent\nThe invitation has been sent. You can see it in the <#${invitesChannel.id}> channel.`
-			)],
-			components: [],
-		}).catch(error => this.container.logger.info(
-			`[CLAN] ${interaction.member.user.username} tried to invite ${memberToInvite.user.username} but an error occurred when trying to update the reply: ${error}`
-		));
+		await interaction
+			.editReply({
+				embeds: [
+					createInfoEmbed(
+						`# 📨 Invitation sent\nThe invitation has been sent. You can see it in the <#${invitesChannel.id}> channel.`,
+					),
+				],
+				components: [],
+			})
+			.catch((error) =>
+				this.container.logger.info(
+					`[CLAN] ${interaction.member.user.username} tried to invite ${memberToInvite.user.username} but an error occurred when trying to update the reply: ${error}`,
+				),
+			);
 
-		this.container.logger.info(`[CLAN] ${interaction.member.user.username} invited ${memberToInvite.user.username} to their clan. Reply updated.`);
+		this.container.logger.info(
+			`[CLAN] ${interaction.member.user.username} invited ${memberToInvite.user.username} to their clan. Reply updated.`,
+		);
 	}
 
 	public async kickSubcommand(interaction: Subcommand.ChatInputCommandInteraction<'cached'>) {
@@ -318,9 +348,7 @@ export class ClanCommand extends Subcommand {
 		}
 
 		await interaction.editReply({
-			embeds: [createInfoEmbed(
-				`# 👢 Member kicked\nThe member has been kicked from the clan.`
-			)],
+			embeds: [createInfoEmbed(`# 👢 Member kicked\nThe member has been kicked from the clan.`)],
 		});
 	}
 
@@ -356,9 +384,11 @@ export class ClanCommand extends Subcommand {
 		clanManager.invalidateCache('clan');
 
 		await interaction.editReply({
-			embeds: [createInfoEmbed(
-				`# 💡 Role claimable status changed\nThe role claimable status has been changed to ${claimEnabled ? 'enabled' : 'disabled'}.`
-			)],
+			embeds: [
+				createInfoEmbed(
+					`# 💡 Role claimable status changed\nThe role claimable status has been changed to ${claimEnabled ? 'enabled' : 'disabled'}.`,
+				),
+			],
 		});
 	}
 
@@ -394,7 +424,7 @@ export class ClanCommand extends Subcommand {
 				cancelText: 'No',
 				restrictToId: interaction.user.id,
 				collectorTime: 30_000,
-			}
+			},
 		);
 
 		const newInteraction = context as MessageComponentInteraction;
@@ -413,9 +443,11 @@ export class ClanCommand extends Subcommand {
 
 		await newInteraction.editReply({
 			content: '',
-			embeds: [createInfoEmbed(
-				`# 🚪 You left the clan\nYou have been removed from the clan "${customRole!.name}" owned by ${clanOwner}.`
-			)],
+			embeds: [
+				createInfoEmbed(
+					`# 🚪 You left the clan\nYou have been removed from the clan "${customRole!.name}" owned by ${clanOwner}.`,
+				),
+			],
 			components: [],
 		});
 	}
@@ -528,32 +560,22 @@ export class ClanCommand extends Subcommand {
 				.setName(this.name)
 				.setDescription('Handle member clans.')
 				.setDMPermission(false)
-				.addSubcommand((subcommand) =>
-					subcommand
-						.setName('create')
-						.setDescription('To create your clan')
-				)
+				.addSubcommand((subcommand) => subcommand.setName('create').setDescription('To create your clan'))
 				.addSubcommand((subcommand) =>
 					subcommand
 						.setName('invite')
 						.setDescription('To invite other members to your clan')
 						.addUserOption((user) =>
-							user
-								.setName('member')
-								.setDescription('The member to invite')
-								.setRequired(true),
-						)
+							user.setName('member').setDescription('The member to invite').setRequired(true),
+						),
 				)
 				.addSubcommand((subcommand) =>
 					subcommand
 						.setName('kick')
 						.setDescription('To kick a member out of your clan')
 						.addUserOption((user) =>
-							user
-								.setName('member')
-								.setDescription('The member to kick')
-								.setRequired(true),
-						)
+							user.setName('member').setDescription('The member to kick').setRequired(true),
+						),
 				)
 				.addSubcommand((subcommand) =>
 					subcommand
@@ -562,30 +584,30 @@ export class ClanCommand extends Subcommand {
 						.addBooleanOption((option) =>
 							option
 								.setName('enabled')
-								.setDescription('Whether or not the members of the clan should be able to claim the custom role.')
+								.setDescription(
+									'Whether or not the members of the clan should be able to claim the custom role.',
+								)
 								.setRequired(true),
-						)
+						),
 				)
+				.addSubcommand((subcommand) => subcommand.setName('delete').setDescription('To delete your clan'))
 				.addSubcommand((subcommand) =>
-					subcommand
-						.setName('delete')
-						.setDescription('To delete your clan')
-				)
-				.addSubcommand((subcommand) =>
-					subcommand
-						.setName('leave')
-						.setDescription('To leave the clan that owns the current text channel.')
+					subcommand.setName('leave').setDescription('To leave the clan that owns the current text channel.'),
 				)
 				.addSubcommand((subcommand) =>
 					subcommand
 						.setName('claim-role')
-						.setDescription('To claim the custom role linked to the clan that owns the current text channel.')
+						.setDescription(
+							'To claim the custom role linked to the clan that owns the current text channel.',
+						),
 				)
 				.addSubcommand((subcommand) =>
 					subcommand
 						.setName('unclaim-role')
-						.setDescription('To claim the custom role linked to the clan that owns the current text channel.')
-				)
+						.setDescription(
+							'To claim the custom role linked to the clan that owns the current text channel.',
+						),
+				),
 		);
 	}
 }

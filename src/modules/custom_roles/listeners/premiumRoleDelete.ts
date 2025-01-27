@@ -17,7 +17,7 @@ export class PremiumRoleDeleteListener extends Listener<typeof Events.GuildRoleD
 		// Delete all data about this role's abilities
 		await this.container.prisma.roleAbilities.delete({
 			where: { guildId_roleId: { guildId: role.guild.id, roleId: role.id } },
-		})
+		});
 
 		// If this role was the legend role, remove that data
 		await this.container.prisma.premiumGuildRoleConfig.updateMany({

@@ -494,7 +494,7 @@ export class RoleSyncCommand extends Subcommand {
 			return this.container.client.guilds.resolve(option);
 		} catch {
 			// We assume the pattern is ours ([emoji] name (id))
-			const results = /\((\d+)\)$/.exec(option);
+			const results = /\((\d+)\)$/.exec(option); // eslint-disable-line prefer-named-capture-group
 
 			return results ? this.container.client.guilds.resolve(results[1]) : null;
 		}
@@ -507,7 +507,7 @@ export class RoleSyncCommand extends Subcommand {
 			return guild.roles.resolve(option);
 		} catch {
 			// We assume the pattern is ours ([emoji] name (id))
-			const results = /\((\d+)\)$/.exec(option);
+			const results = /\((\d+)\)$/.exec(option); // eslint-disable-line prefer-named-capture-group
 
 			return results ? guild.roles.resolve(results[1]) : null;
 		}
@@ -520,7 +520,7 @@ export class RoleSyncCommand extends Subcommand {
 				maybeOriginGuildId, //
 				maybeOriginRoleId,
 				maybeDestinationRoleId,
-			] = [...option.matchAll(/\((\d+)\)/g)];
+			] = [...option.matchAll(/\((\d+)\)/g)]; // eslint-disable-line prefer-named-capture-group
 
 			if (!maybeOriginGuildId || !maybeOriginRoleId || !maybeDestinationRoleId) {
 				return null;

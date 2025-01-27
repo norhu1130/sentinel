@@ -80,11 +80,12 @@ export class CustomRoleCommand extends Subcommand {
 			where: { guildId: interaction.guildId, userId: interaction.user.id },
 		});
 
-		const premiumRoles = [...interaction.guild.roles.cache.values()].filter(
-			role => premiumRoleIds.includes(role.id)
+		const premiumRoles = [...interaction.guild.roles.cache.values()].filter((role) =>
+			premiumRoleIds.includes(role.id),
 		);
 		const lowestPremiumRole = premiumRoles.reduce(
-			(role, lowestRole) => role.position < lowestRole.position ? role : lowestRole, premiumRoles[0]
+			(role, lowestRole) => (role.position < lowestRole.position ? role : lowestRole),
+			premiumRoles[0],
 		);
 
 		const positionRole = interaction.guild.roles.cache.get(guildConfig?.startingPositionRoleId ?? '') ?? null;
@@ -98,7 +99,9 @@ export class CustomRoleCommand extends Subcommand {
 
 		if (!oldRole && !name) {
 			await interaction.editReply({
-				embeds: [createInfoEmbed('You do not have a premium custom role. Please provide a name to create one!')],
+				embeds: [
+					createInfoEmbed('You do not have a premium custom role. Please provide a name to create one!'),
+				],
 			});
 
 			return;
@@ -124,7 +127,7 @@ export class CustomRoleCommand extends Subcommand {
 
 		if (color) {
 			const staffColors: ColorMatch[] = (
-				guildConfig?.staffRoles
+				(guildConfig?.staffRoles
 					.map((id) => {
 						const role = interaction.guild.roles.cache.get(id);
 
@@ -138,7 +141,7 @@ export class CustomRoleCommand extends Subcommand {
 							roleName: role.name,
 						};
 					})
-					.filter((role) => role !== null) as ColorMatch[] ?? []
+					.filter((role) => role !== null) as ColorMatch[]) ?? []
 			).concat(forbiddenColors());
 
 			this.similarityInColors(color, staffColors);
@@ -315,7 +318,9 @@ export class CustomRoleCommand extends Subcommand {
 
 			await interaction.reply({
 				embeds: [
-					createInfoEmbed('Your premium custom role no longer exists. Run `/custom-role edit` to recreate it.'),
+					createInfoEmbed(
+						'Your premium custom role no longer exists. Run `/custom-role edit` to recreate it.',
+					),
 				],
 				ephemeral: true,
 			});

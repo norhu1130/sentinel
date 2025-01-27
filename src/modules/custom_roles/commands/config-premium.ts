@@ -94,36 +94,38 @@ export class ConfigPremiumCommand extends Subcommand {
 			where: { guildId: interaction.guildId },
 		});
 
-		const giftableRole = premiumConfig?.legendRoleId
-			? interaction.guild.roles.resolve(premiumConfig.legendRoleId)
-			: null;
+		const giftableRole =
+			premiumConfig?.legendRoleId ? interaction.guild.roles.resolve(premiumConfig.legendRoleId) : null;
 
-		const clanCategory = premiumConfig?.clanCategoryId
-			? interaction.guild.channels.resolve(premiumConfig.clanCategoryId)
-			: null;
+		const clanCategory =
+			premiumConfig?.clanCategoryId ? interaction.guild.channels.resolve(premiumConfig.clanCategoryId) : null;
 
-		const clanInviteChannel = premiumConfig?.clanInviteChannelId
-			? interaction.guild.channels.resolve(premiumConfig.clanInviteChannelId)
-			: null;
+		const clanInviteChannel =
+			premiumConfig?.clanInviteChannelId ?
+				interaction.guild.channels.resolve(premiumConfig.clanInviteChannelId)
+			:	null;
 
 		const representations = [
 			{ name: 'Giftable Role', value: giftableRole ? `<@&${giftableRole.id}> (${giftableRole.id})` : null },
 			{ name: 'Clan Category', value: clanCategory ? `<#${clanCategory.id}> (${clanCategory.id})` : null },
 			{
 				name: 'Clan Invite Channel',
-				value: clanInviteChannel ? `<#${clanInviteChannel.id}> (${clanInviteChannel.id})` : null
+				value: clanInviteChannel ? `<#${clanInviteChannel.id}> (${clanInviteChannel.id})` : null,
 			},
 		];
 
-		await interaction.reply({ embeds: [
-			createInfoEmbed(representations.map(({ name, value }) => `**${name}:** ${value ?? 'None'}`).join('\n')),
-		], ephemeral: true });
+		await interaction.reply({
+			embeds: [
+				createInfoEmbed(representations.map(({ name, value }) => `**${name}:** ${value ?? 'None'}`).join('\n')),
+			],
+			ephemeral: true,
+		});
 	}
 
 	public async setLegendRoleSubcommand(interaction: Subcommand.ChatInputCommandInteraction<'cached'>) {
 		const role = interaction.options.getRole('role', false);
 
-		if (role && role.managed) {
+		if (role?.managed) {
 			await interaction.reply({
 				embeds: [createInfoEmbed('You cannot set a managed role as the legend role!')],
 				ephemeral: true,
@@ -207,11 +209,12 @@ export class ConfigPremiumCommand extends Subcommand {
 
 		if (existingPremiumConfig) {
 			const previousCategory =
-				existingPremiumConfig.clanCategoryId
-					? interaction.guild.channels.resolve(existingPremiumConfig.clanCategoryId)
-					: null;
+				existingPremiumConfig.clanCategoryId ?
+					interaction.guild.channels.resolve(existingPremiumConfig.clanCategoryId)
+				:	null;
 
-			const previousRepresentation = previousCategory ? `<#${previousCategory.id}> (${previousCategory.id})` : 'none';
+			const previousRepresentation =
+				previousCategory ? `<#${previousCategory.id}> (${previousCategory.id})` : 'none';
 			const newRepresentation = category ? `<#${category.id}> (${category.id})` : 'none';
 
 			await this.container.prisma.premiumGuildRoleConfig.update({
@@ -221,9 +224,7 @@ export class ConfigPremiumCommand extends Subcommand {
 
 			await interaction.reply({
 				embeds: [
-					createInfoEmbed(
-						`Set the clan category from ${previousRepresentation} to ${newRepresentation}`,
-					),
+					createInfoEmbed(`Set the clan category from ${previousRepresentation} to ${newRepresentation}`),
 				],
 				ephemeral: true,
 			});
@@ -261,11 +262,12 @@ export class ConfigPremiumCommand extends Subcommand {
 
 		if (existingPremiumConfig) {
 			const previousChannel =
-				existingPremiumConfig.clanInviteChannelId
-					? interaction.guild.channels.resolve(existingPremiumConfig.clanInviteChannelId)
-					: null;
+				existingPremiumConfig.clanInviteChannelId ?
+					interaction.guild.channels.resolve(existingPremiumConfig.clanInviteChannelId)
+				:	null;
 
-			const previousRepresentation = previousChannel ? `<#${previousChannel.id}> (${previousChannel.id})` : 'none';
+			const previousRepresentation =
+				previousChannel ? `<#${previousChannel.id}> (${previousChannel.id})` : 'none';
 			const newRepresentation = channel ? `<#${channel.id}> (${channel.id})` : 'none';
 
 			await this.container.prisma.premiumGuildRoleConfig.update({
@@ -273,9 +275,14 @@ export class ConfigPremiumCommand extends Subcommand {
 				data: { clanInviteChannelId: channel.id ?? null },
 			});
 
-			await interaction.reply({ embeds: [createInfoEmbed(
-				`Set the clan invites channel from ${previousRepresentation} to ${newRepresentation}`,
-			),], ephemeral: true });
+			await interaction.reply({
+				embeds: [
+					createInfoEmbed(
+						`Set the clan invites channel from ${previousRepresentation} to ${newRepresentation}`,
+					),
+				],
+				ephemeral: true,
+			});
 
 			return;
 		}
@@ -306,23 +313,29 @@ export class ConfigPremiumCommand extends Subcommand {
 			return;
 		}
 
-		const premiumRoles = roleAbilitiesCalculator.getAllPremiumRoleIds().map(
-			(id) => interaction.guild.roles.resolve(id)
-		).filter(Boolean).filter(role => {
-			const abilities = roleAbilitiesCalculator.getRoleAbilities(role!.id);
+		const premiumRoles = roleAbilitiesCalculator
+			.getAllPremiumRoleIds()
+			.map((id) => interaction.guild.roles.resolve(id))
+			.filter(Boolean)
+			.filter((role) => {
+				const abilities = roleAbilitiesCalculator.getRoleAbilities(role!.id);
 
-			return Object.values(abilities).some(Boolean);
-		}) as Role[];
+				return Object.values(abilities).some(Boolean);
+			}) as Role[];
 
 		await interaction.reply({
 			embeds: [
-				createInfoEmbed(premiumRoles.map(role => {
-					const abilities = Object.entries(roleAbilitiesCalculator.getRoleAbilities(role.id)).filter(
-						([_, value]) => value
-					).map(([key]) => `> - ${RoleAbilityMap[key as RoleAbility]}`);
+				createInfoEmbed(
+					premiumRoles
+						.map((role) => {
+							const abilities = Object.entries(roleAbilitiesCalculator.getRoleAbilities(role.id))
+								.filter(([_, value]) => value)
+								.map(([key]) => `> - ${RoleAbilityMap[key as RoleAbility]}`);
 
-					return `### ${role.toString()}\n> **Abilities:**\n${abilities.join('\n')}`;
-				}).join('\n\n')).setTitle('Role Abilities'),
+							return `### ${role.toString()}\n> **Abilities:**\n${abilities.join('\n')}`;
+						})
+						.join('\n\n'),
+				).setTitle('Role Abilities'),
 			],
 			ephemeral: true,
 		});
@@ -360,9 +373,11 @@ export class ConfigPremiumCommand extends Subcommand {
 		});
 
 		await interaction.reply({
-			embeds: [createInfoEmbed(
-				`Added the ability "${RoleAbilityMap[ability as RoleAbility]}" to role ${role.toString()}.`
-			)],
+			embeds: [
+				createInfoEmbed(
+					`Added the ability "${RoleAbilityMap[ability as RoleAbility]}" to role ${role.toString()}.`,
+				),
+			],
 			ephemeral: true,
 		});
 	}
@@ -398,9 +413,11 @@ export class ConfigPremiumCommand extends Subcommand {
 		});
 
 		await interaction.reply({
-			embeds: [createInfoEmbed(
-				`Removed the ability "${RoleAbilityMap[ability as RoleAbility]}" from role ${role.toString()}.`
-			)],
+			embeds: [
+				createInfoEmbed(
+					`Removed the ability "${RoleAbilityMap[ability as RoleAbility]}" from role ${role.toString()}.`,
+				),
+			],
 			ephemeral: true,
 		});
 	}
@@ -658,43 +675,37 @@ export class ConfigPremiumCommand extends Subcommand {
 						.addRoleOption((role) =>
 							role
 								.setName('role')
-								.setDescription('The legend role (leave empty to reset/disable the feature)')
+								.setDescription('The legend role (leave empty to reset/disable the feature)'),
 						),
 				)
 				.addSubcommand((subcommand) =>
 					subcommand
 						.setName('set-clan-category')
-						.setDescription(
-							'Sets the clan category for this server',
-						)
+						.setDescription('Sets the clan category for this server')
 						.addChannelOption((channel) =>
 							channel
 								.setName('category')
 								.setDescription('The clan category')
 								.addChannelTypes(ChannelType.GuildCategory)
-								.setRequired(true)
+								.setRequired(true),
 						),
 				)
 				.addSubcommand((subcommand) =>
 					subcommand
 						.setName('set-clan-invites-channel')
-						.setDescription(
-							'Sets the channel in which clan invites will be sent',
-						)
+						.setDescription('Sets the channel in which clan invites will be sent')
 						.addChannelOption((channel) =>
 							channel
 								.setName('channel')
 								.setDescription('The channel in which to send the clan invites')
 								.addChannelTypes(ChannelType.GuildText)
-								.setRequired(true)
+								.setRequired(true),
 						),
 				)
 				.addSubcommandGroup((role) =>
 					role
 						.setName('role-abilities')
-						.setDescription(
-							'Manage which role gives which ability to the members who have it',
-						)
+						.setDescription('Manage which role gives which ability to the members who have it')
 						.addSubcommand((subcommand) =>
 							subcommand.setName('list').setDescription('Lists the current role abilities'),
 						)
@@ -703,31 +714,45 @@ export class ConfigPremiumCommand extends Subcommand {
 								.setName('add')
 								.setDescription('Adds an ability to a role')
 								.addRoleOption((role) =>
-									role.setName('role').setDescription('The role to add an ability to').setRequired(true),
+									role
+										.setName('role')
+										.setDescription('The role to add an ability to')
+										.setRequired(true),
 								)
 								.addStringOption((option) =>
-									option.setName('ability').setDescription('The ability to add').addChoices(
-										{ name: 'Create a clan', value: 'canCreateClan' },
-										{ name: 'Create a custom role', value: 'canCreateCustomRole' },
-										{ name: 'Gift Legend', value: 'canGiftLegend' },
-									).setRequired(true),
-								)
+									option
+										.setName('ability')
+										.setDescription('The ability to add')
+										.addChoices(
+											{ name: 'Create a clan', value: 'canCreateClan' },
+											{ name: 'Create a custom role', value: 'canCreateCustomRole' },
+											{ name: 'Gift Legend', value: 'canGiftLegend' },
+										)
+										.setRequired(true),
+								),
 						)
 						.addSubcommand((subcommand) =>
 							subcommand
 								.setName('remove')
 								.setDescription('Removes an ability from a role')
 								.addRoleOption((role) =>
-									role.setName('role').setDescription('The role to remove an ability from').setRequired(true),
+									role
+										.setName('role')
+										.setDescription('The role to remove an ability from')
+										.setRequired(true),
 								)
 								.addStringOption((option) =>
-									option.setName('ability').setDescription('The ability to remove').addChoices(
-										{ name: 'Create a clan', value: 'canCreateClan' },
-										{ name: 'Create a custom role', value: 'canCreateCustomRole' },
-										{ name: 'Gift Legend', value: 'canGiftLegend' },
-									).setRequired(true),
-								)
-						)
+									option
+										.setName('ability')
+										.setDescription('The ability to remove')
+										.addChoices(
+											{ name: 'Create a clan', value: 'canCreateClan' },
+											{ name: 'Create a custom role', value: 'canCreateCustomRole' },
+											{ name: 'Gift Legend', value: 'canGiftLegend' },
+										)
+										.setRequired(true),
+								),
+						),
 				)
 				.addSubcommand((subcommand) =>
 					subcommand
@@ -765,7 +790,7 @@ export class ConfigPremiumCommand extends Subcommand {
 								.addRoleOption((role) =>
 									role.setName('role').setDescription('The staff role to remove').setRequired(true),
 								),
-						)
+						),
 				)
 				.addSubcommandGroup((role) =>
 					role

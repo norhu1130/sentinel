@@ -2,21 +2,13 @@ import { ApplyOptions } from '@sapphire/decorators';
 import { Events, Listener } from '@sapphire/framework';
 import type { GuildMember } from 'discord.js';
 import { ClanManager } from '../../../lib/abilities/ClanManager.js';
-import { MemberAbilities } from '../../../lib/abilities/MemberAbilities.js';
 
 @ApplyOptions<Listener.Options>({ event: Events.GuildMemberRemove })
-export class PremiumMemberRemove extends Listener<typeof Events.GuildMemberRemove> {
+export class GuildMemberRemove extends Listener<typeof Events.GuildMemberRemove> {
 	public override async run(member: GuildMember) {
 		const guildConfig = await this.container.prisma.premiumGuildRoleConfig.findFirst({
 			where: { guildId: member.guild.id },
 		});
-
-		const memberAbilities = new MemberAbilities(member);
-		await memberAbilities.computeAbilities();
-
-		if (memberAbilities.hasNone()) {
-			return;
-		}
 
 		this.container.logger.info(`[PREMIUM] ${member.user.tag} left the server`, {
 			userId: member.id,
@@ -55,10 +47,7 @@ export class PremiumMemberRemove extends Listener<typeof Events.GuildMemberRemov
 
 			if (giftedUser) {
 				try {
-					await giftedUser.roles.remove(
-						guildConfig.legendRoleId,
-						'Original premium member left server'
-					);
+					await giftedUser.roles.remove(guildConfig.legendRoleId, 'Original premium member left server');
 				} catch (error) {
 					this.container.logger.error(`[PREMIUM] Failed to remove gifted role`, {
 						userId: giftedUser.id,

@@ -338,6 +338,7 @@ export class VisibleRankRoleSetup extends Subcommand {
 	protected _resolveRoleSyncDataFromRoleSyncOption(option: string) {
 		// If it includes a (), it means we didn't get the id but the input string (Discord -.-)
 		if (option.includes('(')) {
+			// eslint-disable-next-line prefer-named-capture-group
 			const [maybeOriginRoleId, maybeDestinationRoleId] = [...option.matchAll(/\((\d+)\)/g)];
 
 			if (!maybeOriginRoleId || !maybeDestinationRoleId) {

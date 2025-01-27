@@ -6,7 +6,7 @@ export abstract class Task extends Piece {
 	/**
 	 * The run method to be overwritten in actual Task pieces
 	 *
-	 * @param data The data
+	 * @param data - The data
 	 */
 	public abstract run(data?: TaskRunData): Awaitable<PartialResponseValue | null>;
 }

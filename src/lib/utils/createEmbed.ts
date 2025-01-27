@@ -13,9 +13,9 @@ export function createEmbed(message: string | null) {
 }
 
 export function createInfoEmbed(message: string | null) {
-	return createEmbed(message).setColor(0x8ed1)
+	return createEmbed(message).setColor(0x8ed1);
 }
 
 export function createErrorEmbed(message: string | null) {
-	return createEmbed(message).setColor(0xd14700)
+	return createEmbed(message).setColor(0xd14700);
 }

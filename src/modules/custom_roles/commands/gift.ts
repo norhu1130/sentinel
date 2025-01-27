@@ -80,7 +80,10 @@ export class GiftCommand extends Subcommand {
 		// If they haven't gifted a role before, we can just gift it
 		if (!privilegedMember?.giftedRoleToUserId) {
 			try {
-				await targetMember.roles.add(guildConfig.legendRoleId, `Gifted by a premium user (${interaction.user.tag})`);
+				await targetMember.roles.add(
+					guildConfig.legendRoleId,
+					`Gifted by a premium user (${interaction.user.tag})`,
+				);
 			} catch (error) {
 				this.container.logger.error(`Failed to gift role to user`, {
 					userId: interaction.user.id,

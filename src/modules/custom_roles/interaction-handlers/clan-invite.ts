@@ -9,7 +9,7 @@ const welcomeMessages = [
 	'Better late than never, I guess.',
 	`A team isn't complete without its bottom frag.`,
 	`Who's up for swifties?`,
-	'Initiating lockdown sequence. Exit doors locked.'
+	'Initiating lockdown sequence. Exit doors locked.',
 ];
 
 @ApplyOptions<InteractionHandler.Options>({
@@ -31,7 +31,7 @@ export class ClanInvite extends InteractionHandler {
 			return this.none();
 		}
 
-		if (interaction.user.id !== split[1] as string) {
+		if (interaction.user.id !== (split[1] as string)) {
 			return this.none();
 		}
 
@@ -44,10 +44,14 @@ export class ClanInvite extends InteractionHandler {
 
 	public override async run(interaction: ButtonInteraction<'cached'>, data: InteractionHandler.ParseResult<this>) {
 		if (data.decision === 'refuse') {
-			await interaction.update({
-				content: `❌ The invitation was refused.`,
-				components: [],
-			}).catch(error => this.container.logger.error(`[CLAN] (invite 2.10) Failed to update button interaction: ${error}`));
+			await interaction
+				.update({
+					content: `❌ The invitation was refused.`,
+					components: [],
+				})
+				.catch((error) =>
+					this.container.logger.error(`[CLAN] (invite 2.10) Failed to update button interaction: ${error}`),
+				);
 
 			return;
 		}
@@ -57,10 +61,14 @@ export class ClanInvite extends InteractionHandler {
 		const clanOwner = await interaction.guild.members.fetch(data.clanOwner).catch(() => {});
 
 		if (!clanOwner) {
-			await interaction.editReply({
-				content: `❌ This invitation was sent by a member who does not seem to be in the server anymore.`,
-				components: [],
-			}).catch(error => this.container.logger.error(`[CLAN] (invite 2.20) Failed to update button interaction: ${error}`));
+			await interaction
+				.editReply({
+					content: `❌ This invitation was sent by a member who does not seem to be in the server anymore.`,
+					components: [],
+				})
+				.catch((error) =>
+					this.container.logger.error(`[CLAN] (invite 2.20) Failed to update button interaction: ${error}`),
+				);
 
 			return;
 		}
@@ -90,21 +98,33 @@ export class ClanInvite extends InteractionHandler {
 					break;
 			}
 
-			await interaction.editReply({
-				content: errorMessage,
-				components: [],
-			}).catch(error => this.container.logger.error(`[CLAN] (invite 2.30) Failed to update button interaction: ${error}`));
+			await interaction
+				.editReply({
+					content: errorMessage,
+					components: [],
+				})
+				.catch((error) =>
+					this.container.logger.error(`[CLAN] (invite 2.30) Failed to update button interaction: ${error}`),
+				);
 
 			return;
 		}
 
-		await interaction.editReply({
-			content: `✅ Invitation accepted.`,
-			components: [],
-		}).catch(error => this.container.logger.error(`[CLAN] (invite 2.40) Failed to update button interaction: ${error}`));
+		await interaction
+			.editReply({
+				content: `✅ Invitation accepted.`,
+				components: [],
+			})
+			.catch((error) =>
+				this.container.logger.error(`[CLAN] (invite 2.40) Failed to update button interaction: ${error}`),
+			);
 
-		await (await clanManager.getClanChannel())?.send(
-			`<@${data.invitedUser}> has joined the clan! ${welcomeMessages[Math.floor(Math.random() * welcomeMessages.length)]}`
-		).catch(error => this.container.logger.error(`[CLAN] (invite 2.50) Failed to update button interaction: ${error}`));
+		await (await clanManager.getClanChannel())
+			?.send(
+				`<@${data.invitedUser}> has joined the clan! ${welcomeMessages[Math.floor(Math.random() * welcomeMessages.length)]}`,
+			)
+			.catch((error) =>
+				this.container.logger.error(`[CLAN] (invite 2.50) Failed to update button interaction: ${error}`),
+			);
 	}
 }

@@ -27,10 +27,11 @@ export class PremiumUnsubscribe extends Listener<typeof Events.GuildMemberUpdate
 		});
 
 		const canNoLongerCreateClan = !newMemberAbilities.hasAbility('canCreateClan');
-		const canNoLongerCreateCustomRole = oldMemberAbilities.hasAbility('canCreateCustomRole')
-			&& !newMemberAbilities.hasAbility('canCreateCustomRole');
-		const canNoLongerGiftLegend = oldMemberAbilities.hasAbility('canGiftLegend')
-			&& !newMemberAbilities.hasAbility('canGiftLegend');
+		const canNoLongerCreateCustomRole =
+			oldMemberAbilities.hasAbility('canCreateCustomRole') &&
+			!newMemberAbilities.hasAbility('canCreateCustomRole');
+		const canNoLongerGiftLegend =
+			oldMemberAbilities.hasAbility('canGiftLegend') && !newMemberAbilities.hasAbility('canGiftLegend');
 
 		const premiumMember = await this.container.prisma.premiumMember.findFirst({
 			where: { guildId: newMember.guild.id, userId: newMember.id },
@@ -68,7 +69,7 @@ export class PremiumUnsubscribe extends Listener<typeof Events.GuildMemberUpdate
 				try {
 					await giftedUser.roles.remove(
 						guildConfig.legendRoleId,
-						'Original premium member lost premium role'
+						'Original premium member lost premium role',
 					);
 				} catch (error) {
 					this.container.logger.error(`[PREMIUM] Failed to remove gifted role`, {

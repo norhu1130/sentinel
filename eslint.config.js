@@ -56,7 +56,10 @@ export default [
 	typeScriptRuleset,
 	{
 		files: ['**/*{ts,mts,cts,tsx}'],
-		rules: { 'jsdoc/no-undefined-types': 0 },
+		rules: {
+			'jsdoc/no-undefined-types': 0,
+			'n/no-sync': 0,
+		},
 	},
 	prettierRuleset,
 ];

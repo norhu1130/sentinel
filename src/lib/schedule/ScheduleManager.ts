@@ -187,7 +187,7 @@ export class ScheduleManager {
 	/**
 	 * Resolve the time and cron
 	 *
-	 * @param time The time or Cron pattern
+	 * @param time - The time or Cron pattern
 	 */
 	private resolveTime(time: TimeResolvable): [Date, Cron | null] {
 		if (time instanceof Date) return [time, null];
