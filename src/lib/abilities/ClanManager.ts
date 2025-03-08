@@ -64,6 +64,110 @@ export class ClanManager {
 		this.member = member;
 	}
 
+	public static getCreationStatusMessage(status: ClanCreationStatus): string {
+		let message = 'Unknown status.';
+
+		switch (status) {
+			case ClanCreationStatus.Created:
+				message = 'Your clan has been successfully created.';
+				break;
+
+			case ClanCreationStatus.CategoryNotConfigured:
+				message = 'The clan category has not been set. Please contact modmail to solve this issue.';
+				break;
+
+			case ClanCreationStatus.NotAble:
+				message = 'You do not have the ability to create a clan.';
+				break;
+
+			case ClanCreationStatus.AbleButNoCustomRole:
+				message = 'You need to create your own custom role before you can create a clan.';
+				break;
+
+			case ClanCreationStatus.CustomRoleNotFound:
+				message = 'Your custom role could not be found. Please contact modmail to solve this issue.';
+				break;
+
+			case ClanCreationStatus.ExistingClanFound:
+				message = 'You already own a clan, you cannot create a second one.';
+				break;
+
+			case ClanCreationStatus.CouldNotCreateClanChannel:
+				message = 'The clan channel could not be created. Please contact modmail to solve this issue.';
+				break;
+		}
+
+		return message;
+	}
+
+	public static getDeletionStatusMessage(status: ClanDeletionStatus): string {
+		let message = 'Unknown status.';
+
+		switch (status) {
+			case ClanDeletionStatus.Deleted:
+				message = 'Your clan has been successfully deleted.';
+				break;
+
+			case ClanDeletionStatus.ClanNotFound:
+				message = 'You do not own a clan.';
+				break;
+
+			case ClanDeletionStatus.ClanChannelNotFound:
+				message = 'The clan channel could not be found. Please contact modmail to solve this issue.';
+				break;
+
+			case ClanDeletionStatus.CouldNotDeleteClanChannel:
+				message = 'The clan channel could not be deleted. Please contact modmail to solve this issue.';
+				break;
+		}
+
+		return message;
+	}
+
+	public static getMemberAddStatusMessage(status: ClanMemberAddStatus): string {
+		let message = 'Unknown status.';
+
+		switch (status) {
+			case ClanMemberAddStatus.Added:
+				message = `✅ You have successfully joined the clan.`;
+				break;
+
+			case ClanMemberAddStatus.ClanNotFound:
+				message = `❌ This invitation was sent by a member who does not seem to have a clan anymore.`;
+				break;
+
+			case ClanMemberAddStatus.AlreadyInClan:
+				message = `❌ You are already in the clan.`;
+				break;
+
+			case ClanMemberAddStatus.InvitedMemberNotFound:
+				message = `❌ Invited member could not be found. Please contact modmail to solve this issue.`;
+				break;
+
+			case ClanMemberAddStatus.CouldNotAddToChannel:
+				message = `❌ Was not able to add member to the clan channel. Please contact modmail to solve this issue.`;
+				break;
+		}
+
+		return message;
+	}
+
+	public static getMemberRemoveStatusMessage(status: ClanMemberRemoveStatus): string {
+		let message = 'Unknown status.';
+
+		switch (status) {
+			case ClanMemberRemoveStatus.Removed:
+				message = `The member was removed from your clan.`;
+				break;
+
+			case ClanMemberRemoveStatus.NotInClan:
+				message = 'The provided member is not in your clan.';
+				break;
+		}
+
+		return message;
+	}
+
 	public static async fromChannel(channel: TextChannel): Promise<ClanManager | undefined> {
 		const clan = await container.prisma.clan.findFirst({
 			where: { guildId: channel.guildId, channelId: channel.id },
@@ -150,6 +254,18 @@ export class ClanManager {
 		}
 
 		return this.clan;
+	}
+
+	public async getClansFromOtherGuilds(): Promise<Clan[]> {
+		const customRoleIds = await this.getCustomRoleIdsFromOtherGuilds();
+
+		if (customRoleIds.length < 1) {
+			return [];
+		}
+
+		return container.prisma.clan.findMany({
+			where: { guildId: { not: this.member.guild.id }, customRoleId: { in: customRoleIds } },
+		});
 	}
 
 	public async getClanChannel(): Promise<TextChannel | null | undefined> {
@@ -480,9 +596,21 @@ export class ClanManager {
 		return this.premiumMember;
 	}
 
+	private async getPremiumMembersFromOtherGuilds(): Promise<PremiumMember[] | null> {
+		return container.prisma.premiumMember.findMany({
+			where: { guildId: { not: this.member.guild.id }, userId: this.member.id },
+		});
+	}
+
 	private async getCustomRoleId(): Promise<string | undefined> {
 		const premiumMember = await this.getPremiumMember();
 
 		return premiumMember?.customRoleId ?? undefined;
+	}
+
+	private async getCustomRoleIdsFromOtherGuilds(): Promise<string[]> {
+		const premiumMembers = await this.getPremiumMembersFromOtherGuilds();
+
+		return (premiumMembers?.map((premiumMember) => premiumMember?.customRoleId).filter(Boolean) ?? []) as string[];
 	}
 }

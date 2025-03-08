@@ -78,29 +78,9 @@ export class ClanInvite extends InteractionHandler {
 		const clanMemberAddStatus = await clanManager.inviteMember(data.invitedUser);
 
 		if (clanMemberAddStatus !== ClanMemberAddStatus.Added) {
-			let errorMessage = '';
-
-			switch (clanMemberAddStatus) {
-				case ClanMemberAddStatus.ClanNotFound:
-					errorMessage = `❌ This invitation was sent by a member who does not seem to have a clan anymore.`;
-					break;
-
-				case ClanMemberAddStatus.AlreadyInClan:
-					errorMessage = `❌ You are already in the clan.`;
-					break;
-
-				case ClanMemberAddStatus.InvitedMemberNotFound:
-					errorMessage = `❌ Invited member could not be found. Please contact modmail to solve this issue.`;
-					break;
-
-				case ClanMemberAddStatus.CouldNotAddToChannel:
-					errorMessage = `❌ Was not able to add member to the clan channel. Please contact modmail to solve this issue.`;
-					break;
-			}
-
 			await interaction
 				.editReply({
-					content: errorMessage,
+					content: ClanManager.getMemberAddStatusMessage(clanMemberAddStatus),
 					components: [],
 				})
 				.catch((error) =>

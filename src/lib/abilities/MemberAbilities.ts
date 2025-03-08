@@ -13,6 +13,7 @@ export class MemberAbilities {
 		canCreateClan: false,
 		canCreateCustomRole: false,
 		canGiftLegend: false,
+		areAbilitiesMultiGuild: false,
 	};
 
 	public constructor(member: GuildMember) {
@@ -39,6 +40,7 @@ export class MemberAbilities {
 		this.abilities.canCreateClan = this.roleAbilities.getPremiumRoleIds('canCreateClan').some(hasRole);
 		this.abilities.canCreateCustomRole = this.roleAbilities.getPremiumRoleIds('canCreateCustomRole').some(hasRole);
 		this.abilities.canGiftLegend = this.roleAbilities.getPremiumRoleIds('canGiftLegend').some(hasRole);
+		this.abilities.areAbilitiesMultiGuild = this.roleAbilities.getPremiumRoleIds('areAbilitiesMultiGuild').some(hasRole);
 
 		this.abilitiesComputed = true;
 	}

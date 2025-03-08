@@ -247,9 +247,10 @@ model RoleAbilities {
   guildId String
   roleId  String
 
-  canCreateCustomRole Boolean @default(false)
-  canGiftLegend       Boolean @default(false)
-  canCreateClan       Boolean @default(false)
+  canCreateCustomRole    Boolean @default(false)
+  canGiftLegend          Boolean @default(false)
+  canCreateClan          Boolean @default(false)
+  areAbilitiesMultiGuild Boolean @default(false)
 
   @@id([guildId, roleId])
   @@map("role_abilities")

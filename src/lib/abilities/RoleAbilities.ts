@@ -9,6 +9,7 @@ export class RoleAbilitiesCalculator {
 		canCreateClan: [],
 		canCreateCustomRole: [],
 		canGiftLegend: [],
+		areAbilitiesMultiGuild: [],
 	};
 
 	public constructor(guildId: string) {
@@ -29,6 +30,9 @@ export class RoleAbilitiesCalculator {
 				.filter((role) => role.canCreateCustomRole)
 				.map((result) => result.roleId),
 			canCreateClan: allPremiumRoles.filter((role) => role.canCreateClan).map((result) => result.roleId),
+			areAbilitiesMultiGuild: allPremiumRoles
+				.filter((role) => role.areAbilitiesMultiGuild)
+				.map((result) => result.roleId),
 		};
 	}
 
@@ -51,15 +55,17 @@ export class RoleAbilitiesCalculator {
 			canCreateClan: this.premiumRoleIds.canCreateClan.includes(roleId),
 			canCreateCustomRole: this.premiumRoleIds.canCreateCustomRole.includes(roleId),
 			canGiftLegend: this.premiumRoleIds.canGiftLegend.includes(roleId),
+			areAbilitiesMultiGuild: this.premiumRoleIds.areAbilitiesMultiGuild.includes(roleId),
 		};
 	}
 }
 
-export type RoleAbility = 'canCreateClan' | 'canCreateCustomRole' | 'canGiftLegend';
+export type RoleAbility = 'areAbilitiesMultiGuild' | 'canCreateClan' | 'canCreateCustomRole' | 'canGiftLegend';
 export type RoleAbilities = Record<RoleAbility, boolean>;
 
 export const RoleAbilityMap: Record<RoleAbility, string> = {
 	canCreateClan: 'Can create clan',
 	canCreateCustomRole: 'Can create custom role',
 	canGiftLegend: 'Can gift legend',
+	areAbilitiesMultiGuild: 'Can use abilities on multiple servers',
 };

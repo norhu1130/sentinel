@@ -1,11 +1,13 @@
 import { Buffer } from 'node:buffer';
 import { Subcommand, type SubcommandMappingArray } from '@sapphire/plugin-subcommands';
-import { type RoleEditOptions } from 'discord.js';
+import type { MessageComponentInteraction, RoleEditOptions } from 'discord.js';
 import looksSame, { type Color } from 'looks-same';
 import magicBytes from 'magic-bytes.js';
+import { ClanDeletionStatus, ClanManager } from '../../../lib/abilities/ClanManager.js';
 import { MemberAbilities } from '../../../lib/abilities/MemberAbilities.js';
 import { RoleAbilitiesCalculator } from '../../../lib/abilities/RoleAbilities.js';
-import { createInfoEmbed } from '../../../lib/utils/createEmbed.js';
+import { createErrorEmbed, createInfoEmbed } from '../../../lib/utils/createEmbed.js';
+import { waitForButtonConfirm } from '../../../lib/utils/waitForInteraction.js';
 
 // tolerance will be something that we need to definitely tweak over time. Right now it's pretty loose, you need to be reaaal close to the staff colors to be rejected
 const kTolerance = 2.5;
@@ -39,6 +41,11 @@ export class CustomRoleCommand extends Subcommand {
 			type: 'method',
 			name: 'toggle',
 			chatInputRun: 'toggleSubcommand',
+		},
+		{
+			type: 'method',
+			name: 'delete',
+			chatInputRun: 'deleteSubcommand',
 		},
 	];
 
@@ -79,6 +86,12 @@ export class CustomRoleCommand extends Subcommand {
 		const premiumMember = await this.container.prisma.premiumMember.findFirst({
 			where: { guildId: interaction.guildId, userId: interaction.user.id },
 		});
+		const premiumMemberFromOtherGuilds = await this.container.prisma.premiumMember.findMany({
+			where: { guildId: { not: interaction.guildId }, userId: interaction.user.id },
+		});
+		const customRolesFromOtherGuilds = premiumMemberFromOtherGuilds
+			?.map(premiumMember => premiumMember?.customRoleId)
+			?.filter(Boolean);
 
 		const premiumRoles = [...interaction.guild.roles.cache.values()].filter((role) =>
 			premiumRoleIds.includes(role.id),
@@ -91,6 +104,16 @@ export class CustomRoleCommand extends Subcommand {
 		const positionRole = interaction.guild.roles.cache.get(guildConfig?.startingPositionRoleId ?? '') ?? null;
 		const oldRole = interaction.guild.roles.cache.get(premiumMember?.customRoleId ?? '') ?? null;
 		const position = (positionRole?.position ?? lowestPremiumRole?.position ?? 0) + 1;
+
+		if (!oldRole && customRolesFromOtherGuilds.length > 0 && !memberAbilities.hasAbility('areAbilitiesMultiGuild')) {
+			await interaction.editReply({
+				embeds: [
+					createInfoEmbed('You cannot create a custom role in this server as you already have a custom role in another server.'),
+				],
+			});
+
+			return;
+		}
 
 		const name = interaction.options.getString('name');
 		const rawColor = interaction.options.getString('color');
@@ -360,6 +383,136 @@ export class CustomRoleCommand extends Subcommand {
 		}
 	}
 
+	public async deleteSubcommand(interaction: Subcommand.ChatInputCommandInteraction<'cached'>) {
+		await interaction.deferReply({
+			ephemeral: true,
+		});
+
+		const clanManager = new ClanManager(interaction.member);
+		const premiumMember = await this.container.prisma.premiumMember.findFirst({
+			where: { guildId: interaction.guildId, userId: interaction.user.id },
+		});
+		const oldRole = interaction.guild.roles.cache.get(premiumMember?.customRoleId ?? '') ?? null;
+
+		if (!oldRole) {
+			await interaction.editReply({
+				embeds: [
+					createInfoEmbed('You do not have a premium custom role.'),
+				],
+			});
+
+			return;
+		}
+
+		const oldClan = await clanManager.getClan();
+		const hasClan = Boolean(oldClan);
+		const confirmMessageWithoutClan = `# ⚠️ WARNING\n**You are about to delete your custom role**\nYour custom role will be entirely deleted and you will have to re-create it if you want it back.\n\nAre you sure you want to delete your custom role?`;
+		const confirmMessageWithClan = `# ⚠️ WARNING\n**You are about to delete both your custom role AND your clan**\n-# A clan cannot exist without its corresponding custom role\n\n- Your clan's text channel will be entirely deleted with no possibility to recover it.\n- Your custom role will be entirely deleted and you will have to re-create it if you want it back.\n\nAre you sure you want to delete both your clan and your custom role?`;
+
+		const { context, confirmed } = await waitForButtonConfirm(
+			interaction,
+			oldClan ? confirmMessageWithClan : confirmMessageWithoutClan,
+			{
+				confirmText: 'Yes',
+				cancelText: 'No',
+				restrictToId: interaction.user.id,
+				collectorTime: 30_000,
+			},
+		);
+
+		const newInteraction = context as MessageComponentInteraction;
+
+		if (!confirmed) {
+			await newInteraction.editReply({
+				content: '',
+				embeds: [createInfoEmbed('Cancelled custom role deletion.')],
+				components: [],
+			});
+
+			return;
+		}
+
+		if (oldClan) {
+			const clanDeletionStatus = await clanManager.deleteClan();
+
+			if (clanDeletionStatus !== ClanDeletionStatus.Deleted) {
+				const errorMessage = `Your custom role could not be deleted because your clan could not be deleted: ${ClanManager.getDeletionStatusMessage(clanDeletionStatus)}`;
+
+				this.container.logger.error(
+					`[CUSTOM ROLE] ${interaction.member.user.username} failed to delete: ${errorMessage}`,
+				);
+				await newInteraction.editReply({
+					content: '',
+					embeds: [createErrorEmbed(errorMessage)],
+					components: [],
+				});
+
+				return;
+			}
+		}
+
+		try {
+			await interaction.guild.roles.delete(oldRole);
+		} catch (error) {
+			this.container.logger.error(
+				`[CUSTOM ROLE] ${interaction.member.user.username} failed to delete: could not delete Discord role.`,
+				{
+					userId: interaction.user.id,
+					guildId: interaction.guildId,
+					error,
+				}
+			);
+
+			await newInteraction.editReply({
+				content: '',
+				embeds: [
+					createInfoEmbed(
+						'Your custom role could not be deleted from the server. If this persists, please contact modmail.',
+					),
+				],
+				components: [],
+			});
+
+			return;
+		}
+
+		try {
+			await this.container.prisma.premiumMember.delete({
+				where: {
+					guildId_userId: { guildId: interaction.guildId, userId: interaction.user.id }
+				},
+			});
+
+			await newInteraction.editReply({
+				content: '',
+				embeds: [
+					createInfoEmbed(
+						hasClan ?
+							`Your premium custom role and clan have been deleted.`
+							: `Your premium custom role has been deleted.`,
+					),
+				],
+				components: [],
+			});
+		} catch (error) {
+			this.container.logger.error(`[CUSTOM ROLE] ${interaction.member.user.username} failed to delete from the database.`, {
+				userId: interaction.user.id,
+				guildId: interaction.guildId,
+				error,
+			});
+
+			await newInteraction.editReply({
+				content: '',
+				embeds: [
+					createInfoEmbed(
+						'Your custom role could not be deleted from the database. If this persists, please contact modmail.',
+					),
+				],
+				components: [],
+			});
+		}
+	}
+
 	public override registerApplicationCommands(registry: Subcommand.Registry) {
 		registry.registerChatInputCommand((builder) =>
 			builder
@@ -369,7 +522,7 @@ export class CustomRoleCommand extends Subcommand {
 				.addSubcommand((subcommand) =>
 					subcommand
 						.setName('edit')
-						.setDescription('Edits your premium custom role.')
+						.setDescription('Edit your premium custom role.')
 						.addStringOption((name) =>
 							name
 								.setName('name')
@@ -392,7 +545,10 @@ export class CustomRoleCommand extends Subcommand {
 						),
 				)
 				.addSubcommand((subcommand) =>
-					subcommand.setName('toggle').setDescription('Toggles the visibility of your premium custom role.'),
+					subcommand.setName('toggle').setDescription('Toggle the visibility of your premium custom role.'),
+				)
+				.addSubcommand((subcommand) =>
+					subcommand.setName('delete').setDescription('Delete your premium custom role.'),
 				),
 		);
 	}

@@ -10,6 +10,7 @@ import {
 } from '../../../lib/abilities/ClanManager.js';
 import { createErrorEmbed, createInfoEmbed } from '../../../lib/utils/createEmbed.js';
 import { waitForButtonConfirm } from '../../../lib/utils/waitForInteraction.js';
+import { MemberAbilities } from '../../../lib/abilities/MemberAbilities.js';
 
 const clanInviteCooldown = 60 * 60_000; // 60 seconds * 60 minutes * 24 hours = 1 hour
 const clanInviteDelayString = 'an hour';
@@ -62,40 +63,28 @@ export class ClanCommand extends Subcommand {
 	public async createSubcommand(interaction: Subcommand.ChatInputCommandInteraction<'cached'>) {
 		await interaction.deferReply({ ephemeral: true });
 
+		const memberAbilities = new MemberAbilities(interaction.member);
 		const clanManager = new ClanManager(interaction.member);
+		const oldClan = await clanManager.getClan();
+		const otherClans = await clanManager.getClansFromOtherGuilds();
+
+		await memberAbilities.computeAbilities();
+
+		if (!oldClan && otherClans.length > 0 && !memberAbilities.hasAbility('areAbilitiesMultiGuild')) {
+			await interaction.editReply({
+				embeds: [
+					createInfoEmbed('You cannot create a clan in this server as you already have a clan in another server.'),
+				],
+			});
+
+			return;
+		}
+
 		const clanCreationStatus = await clanManager.createClan();
 
 		if (clanCreationStatus !== ClanCreationStatus.Created) {
-			let errorMessage = '';
-
-			switch (clanCreationStatus) {
-				case ClanCreationStatus.CategoryNotConfigured:
-					errorMessage = 'The clan category has not been set. Please contact modmail to solve this issue.';
-					break;
-
-				case ClanCreationStatus.NotAble:
-					errorMessage = 'You do not have the ability to create a clan.';
-					break;
-
-				case ClanCreationStatus.AbleButNoCustomRole:
-					errorMessage = 'You need to create your own custom role before you can create a clan.';
-					break;
-
-				case ClanCreationStatus.CustomRoleNotFound:
-					errorMessage = 'Your custom role could not be found. Please contact modmail to solve this issue.';
-					break;
-
-				case ClanCreationStatus.ExistingClanFound:
-					errorMessage = 'You already own a clan, you cannot create a second one.';
-					break;
-
-				case ClanCreationStatus.CouldNotCreateClanChannel:
-					errorMessage = 'The clan channel could not be created. Please contact modmail to solve this issue.';
-					break;
-			}
-
 			await interaction.editReply({
-				embeds: [createErrorEmbed(errorMessage)],
+				embeds: [createErrorEmbed(ClanManager.getCreationStatusMessage(clanCreationStatus))],
 			});
 
 			return;
@@ -144,21 +133,7 @@ export class ClanCommand extends Subcommand {
 		const clanDeletionStatus = await clanManager.deleteClan();
 
 		if (clanDeletionStatus !== ClanDeletionStatus.Deleted) {
-			let errorMessage = '';
-
-			switch (clanDeletionStatus) {
-				case ClanDeletionStatus.ClanNotFound:
-					errorMessage = 'You do not own a clan.';
-					break;
-
-				case ClanDeletionStatus.ClanChannelNotFound:
-					errorMessage = 'The clan channel could not be found. Please contact modmail to solve this issue.';
-					break;
-
-				case ClanDeletionStatus.CouldNotDeleteClanChannel:
-					errorMessage = 'The clan channel could not be deleted. Please contact modmail to solve this issue.';
-					break;
-			}
+			const errorMessage = ClanManager.getDeletionStatusMessage(clanDeletionStatus);
 
 			this.container.logger.error(
 				`[CLAN] ${interaction.member.user.username} failed to delete clan: ${errorMessage}`,
@@ -332,16 +307,8 @@ export class ClanCommand extends Subcommand {
 		const clanMemberRemoveStatus = await clanManager.removeMember(memberToKick);
 
 		if (clanMemberRemoveStatus !== ClanMemberRemoveStatus.Removed) {
-			let errorMessage = '';
-
-			switch (clanMemberRemoveStatus) {
-				case ClanMemberRemoveStatus.NotInClan:
-					errorMessage = 'The provided member is not in your clan.';
-					break;
-			}
-
 			await interaction.editReply({
-				embeds: [createErrorEmbed(errorMessage)],
+				embeds: [createErrorEmbed(ClanManager.getMemberRemoveStatusMessage(clanMemberRemoveStatus))],
 			});
 
 			return;

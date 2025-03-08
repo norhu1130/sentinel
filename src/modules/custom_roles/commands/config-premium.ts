@@ -727,6 +727,7 @@ export class ConfigPremiumCommand extends Subcommand {
 											{ name: 'Create a clan', value: 'canCreateClan' },
 											{ name: 'Create a custom role', value: 'canCreateCustomRole' },
 											{ name: 'Gift Legend', value: 'canGiftLegend' },
+											{ name: 'Use abilities on multiple servers', value: 'areAbilitiesMultiGuild' },
 										)
 										.setRequired(true),
 								),
@@ -749,6 +750,7 @@ export class ConfigPremiumCommand extends Subcommand {
 											{ name: 'Create a clan', value: 'canCreateClan' },
 											{ name: 'Create a custom role', value: 'canCreateCustomRole' },
 											{ name: 'Gift Legend', value: 'canGiftLegend' },
+											{ name: 'Use abilities on multiple servers', value: 'areAbilitiesMultiGuild' },
 										)
 										.setRequired(true),
 								),
