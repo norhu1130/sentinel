@@ -383,6 +383,19 @@ export class ClanCommand extends Subcommand {
 		const customRole = await clanManager.getCustomRole();
 		const clanOwnerId = clanManager.getClanOwnerId();
 
+		if (clanOwnerId === interaction.user.id) {
+			const clanCommandId = interaction.client.application.commands.cache.find(
+				command => command.name === 'clan'
+			)?.id;
+			const clanCommandMention = clanCommandId ? `</clan delete:${clanCommandId}>` : '`/clan delete`'
+
+			await interaction.editReply({
+				embeds: [createErrorEmbed(`You cannot leave your own clan. Did you mean to use ${clanCommandMention}?`)],
+			});
+
+			return;
+		}
+
 		const { context, confirmed } = await waitForButtonConfirm(
 			interaction,
 			`# ⚠️ WARNING\n**You are about to leave the clan "${customRole!.name}" owned by <@${clanOwnerId}>**\nYou will also lose the custom role linked to it, if you claimed it.\n\nAre you sure you want to leave the clan?`,

@@ -490,13 +490,13 @@ export class ClanManager {
 	}
 
 	public async makeClanOrphan(force = false): Promise<void> {
-		await this.getClan();
+		const clan = await this.getClan();
 
-		if (!this.clan) {
+		if (!clan) {
 			return;
 		}
 
-		if (!force && this.clan.deletionTaskId) {
+		if (!force && clan.deletionTaskId) {
 			return;
 		}
 
@@ -508,7 +508,7 @@ export class ClanManager {
 		);
 
 		await container.prisma.clan.update({
-			where: { guildId_customRoleId: { guildId: this.guild.id, customRoleId: this.clan.customRoleId } },
+			where: { guildId_customRoleId: { guildId: this.guild.id, customRoleId: clan.customRoleId } },
 			data: { deletionTaskId: deletionTask.id },
 		});
 	}
