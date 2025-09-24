@@ -8,7 +8,7 @@ import type { Message, TextChannel } from 'discord.js';
 
 export class ClientCommand extends Command {
 	public override async messageRun(message: Message, args: Args) {
-		if (message.author.id !== '139836912335716352') {
+		if (message.author.id !== '141288766760288256') {
 			return;
 		}
 
