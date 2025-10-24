@@ -7,8 +7,7 @@ import { createInfoEmbed } from '../lib/utils/createEmbed.js';
 // Removed fetchReadableUser as we only need the ID mention format
 
 const header = '[CLAN DIRECTORY] ';
-const clansPerPage = 10; // Number of clans to show per embed page
-
+const clansPerPage = 10; 
 export class UpdateClanDirectory extends Task {
 	public async run() {
 		this.container.logger.info(`${header}Starting clan directory update...`);
@@ -20,10 +19,10 @@ export class UpdateClanDirectory extends Task {
 
 		if (allClans.length === 0) {
 			this.container.logger.info(`${header}No clans found to process.`);
-			return null; // No clans, nothing to do
+			return null; 
 		}
 
-		// Group clans by guild ID for efficient processing
+		
 		const clansByGuild = allClans.reduce((map, clan) => {
 			const clans = map.get(clan.guildId) ?? [];
 			clans.push(clan);
@@ -31,20 +30,20 @@ export class UpdateClanDirectory extends Task {
 			return map;
 		}, new Map<string, typeof allClans>());
 
-		// Process each guild that has clans
+		
 		for (const [guildId, clans] of clansByGuild.entries()) {
 			const guild = this.container.client.guilds.cache.get(guildId);
 			if (!guild) {
 				this.container.logger.warn(`${header}Skipping guild ${guildId}: Guild not found in cache.`);
-				continue; // Skip if guild isn't cached (bot might not be in it anymore)
+				continue; 
 			}
 
-			// Fetch the guild's specific configuration for the directory
+			
 			const config = await this.container.prisma.premiumGuildRoleConfig.findFirst({
 				where: { guildId },
 			});
 
-			// Skip if the directory channel or message ID isn't configured
+			
 			if (!config?.clanDirectoryChannelId || !config.clanDirectoryMessageId) {
 				this.container.logger.debug(
 					`${header}Skipping guild ${guild.name} (${guildId}): Directory channel or message ID not configured.`,
@@ -52,12 +51,11 @@ export class UpdateClanDirectory extends Task {
 				continue;
 			}
 
-			// Fetch the configured directory channel
 			const channel = (await guild.channels
 				.fetch(config.clanDirectoryChannelId)
 				.catch(() => null)) as GuildTextBasedChannel | null;
 
-			// Validate the channel exists and is a text-based channel
+			
 			if (!channel || !channel.isTextBased()) {
 				this.container.logger.warn(
 					`${header}Skipping guild ${guild.name} (${guildId}): Directory channel ${config.clanDirectoryChannelId} not found or is not a text channel.`,
@@ -65,13 +63,13 @@ export class UpdateClanDirectory extends Task {
 				continue;
 			}
 
-			// Fetch the specific message designated for the directory
+			
 			let message: Message | null = null;
 			try {
 				// Tries to fetch using the ID from the DB
 				message = await channel.messages.fetch(config.clanDirectoryMessageId);
 			} catch {
-				// If fetch fails (message deleted, etc.)
+				
 				this.container.logger.warn(
 					`${header}Directory message ${config.clanDirectoryMessageId} not found... Attempting to recreate.`,
 				);
@@ -94,28 +92,28 @@ export class UpdateClanDirectory extends Task {
 				}
 			}
 
-			// Prepare data for formatting
+			
 			const allClansData: ClanDirectoryData[] = [];
 			for (const clan of clans) {
-				// Fetch the associated role to get the clan name
+				
 				const clanRole = (await guild.roles.fetch(clan.customRoleId).catch(() => null)) as Role | null;
 				if (!clanRole) {
 					this.container.logger.warn(
 						`${header}Clan role ${clan.customRoleId} not found for clan in guild ${guild.name} (${guildId}). Skipping this clan.`,
 					);
-					continue; // Skip this clan if its role is gone
+					continue; 
 				}
 
-				// Find the owner's user ID from the PremiumMember table
+				
 				const premiumMember = await this.container.prisma.premiumMember.findFirst({
 					where: { guildId: clan.guildId, customRoleId: clan.customRoleId },
 				});
 
 				allClansData.push({
 					name: clanRole.name,
-					description: clan.description ?? 'No description set.', // Use default if null
+					description: clan.description ?? 'No description set.', 
 					memberCount: clan.members.length,
-					ownerId: premiumMember?.userId, // Owner ID might be null if data is inconsistent
+					ownerId: premiumMember?.userId, 
 				});
 			}
 
@@ -145,19 +143,15 @@ export class UpdateClanDirectory extends Task {
 				}
 			}
 
-			// Ensure we have at least one embed, even if empty
 			if (embeds.length === 0) {
 				embeds.push(EmbedBuilder.from(baseEmbed).setDescription('There are currently no clans to display.'));
 			}
 
-			// Edit the existing message with the first page of the directory
-			// Note: This simple implementation only updates with the first page.
-			// For full pagination, you'd typically add buttons and handle interactions.
 			try {
 				await message.edit({
-					content: `*Last updated: <t:${Math.floor(Date.now() / 1000)}:R>*`, // Add a relative timestamp
-					embeds: [embeds[0]], // Send only the first page
-					components: [], // Clear any previous components
+					content: `*Last updated: <t:${Math.floor(Date.now() / 1000)}:R>*`, 
+					embeds: [embeds[0]], 
+					components: [], 
 				});
 				this.container.logger.info(
 					`${header}Successfully updated directory message ${config.clanDirectoryMessageId} for guild ${guild.name} (${guildId}).`,
@@ -168,35 +162,35 @@ export class UpdateClanDirectory extends Task {
 					error,
 				);
 			}
-		} // End of guild loop
+		} 
 
 		this.container.logger.info(`${header}Finished clan directory update task.`);
-		return null; // Indicate successful run for a recurring task
+		return null; 
 	}
 
 	/** Formats a single clan's data into a string for the embed. */
 	private formatClanEntry(data: ClanDirectoryData, index: number): string {
-		const rank = ''; // Placeholder for future points/rank system
+		const rank = ''; 
 		const ownerMention = data.ownerId ? `<@${data.ownerId}>` : '`Unknown Owner`'; // Use mention or fallback text
 
-		// Using block quotes for description for better visual separation
+		
 		const description = data.description
 			.split('\n')
 			.map((line) => `> ${line}`)
 			.join('\n');
 
 		return [
-			`**${index}. ${data.name}** ${rank}`, // Clan name and rank
+			`**${index}. ${data.name}** ${rank}`, 
 			`   └─ Owner: ${ownerMention} | Members: **${data.memberCount}**/${MAX_MEMBERS_IN_CLAN}`, // Owner and member count
-			description, // Description
+			description, 
 		].join('\n');
 	}
 }
 
-/** Interface defining the structure of data needed to format a clan entry. */
+
 interface ClanDirectoryData {
 	name: string;
 	description: string;
 	memberCount: number;
-	ownerId?: string | null; // Owner ID can be null or undefined
+	ownerId?: string | null;
 }
