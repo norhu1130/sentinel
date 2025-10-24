@@ -1,7 +1,7 @@
 import { Subcommand, type SubcommandMappingArray } from '@sapphire/plugin-subcommands';
 import { remove } from 'confusables';
 import { ChannelType } from 'discord-api-types/v10';
-import { PermissionFlagsBits, escapeMarkdown, type Role } from 'discord.js';
+import { PermissionFlagsBits, escapeMarkdown, type Role, Message, TextChannel } from 'discord.js';
 import type { RoleAbility } from '../../../lib/abilities/RoleAbilities.js';
 import { RoleAbilitiesCalculator, RoleAbilityMap } from '../../../lib/abilities/RoleAbilities.js';
 import { createErrorEmbed, createInfoEmbed } from '../../../lib/utils/createEmbed.js';
@@ -84,6 +84,17 @@ export class ConfigPremiumCommand extends Subcommand {
 				{
 					name: 'list',
 					chatInputRun: 'listForbiddenNamesSubcommand',
+				},
+			],
+		},
+
+		{
+			type: 'group',
+			name: 'directory', // New group for directory settings
+			entries: [
+				{
+					name: 'set-channel',
+					chatInputRun: 'setDirectoryChannelSubcommand',
 				},
 			],
 		},
@@ -727,7 +738,10 @@ export class ConfigPremiumCommand extends Subcommand {
 											{ name: 'Create a clan', value: 'canCreateClan' },
 											{ name: 'Create a custom role', value: 'canCreateCustomRole' },
 											{ name: 'Gift Legend', value: 'canGiftLegend' },
-											{ name: 'Use abilities on multiple servers', value: 'areAbilitiesMultiGuild' },
+											{
+												name: 'Use abilities on multiple servers',
+												value: 'areAbilitiesMultiGuild',
+											},
 										)
 										.setRequired(true),
 								),
@@ -750,7 +764,10 @@ export class ConfigPremiumCommand extends Subcommand {
 											{ name: 'Create a clan', value: 'canCreateClan' },
 											{ name: 'Create a custom role', value: 'canCreateCustomRole' },
 											{ name: 'Gift Legend', value: 'canGiftLegend' },
-											{ name: 'Use abilities on multiple servers', value: 'areAbilitiesMultiGuild' },
+											{
+												name: 'Use abilities on multiple servers',
+												value: 'areAbilitiesMultiGuild',
+											},
 										)
 										.setRequired(true),
 								),
@@ -827,5 +844,137 @@ export class ConfigPremiumCommand extends Subcommand {
 						),
 				),
 		);
+	}
+
+	public async setDirectoryChannelSubcommand(interaction: Subcommand.ChatInputCommandInteraction<'cached'>) {
+		const channel = interaction.options.getChannel('channel', true);
+
+		// 1. Validate Channel Type
+		if (!channel || channel.type !== ChannelType.GuildText) {
+			await interaction.reply({
+				embeds: [createErrorEmbed('Please provide a valid text channel.')],
+				ephemeral: true,
+			});
+			return;
+		}
+
+		// 2. Check Bot Permissions in the target channel
+		const me = await interaction.guild.members.fetch(this.container.client.user!.id);
+		const permissions = channel.permissionsFor(me);
+
+		if (!permissions.has(PermissionFlagsBits.SendMessages)) {
+			await interaction.reply({
+				embeds: [createErrorEmbed(`I don't have permission to send messages in <#${channel.id}>.`)],
+				ephemeral: true,
+			});
+			return;
+		}
+		// Optional: Check ReadMessageHistory permission too, as the task will need it later
+		if (!permissions.has(PermissionFlagsBits.ReadMessageHistory)) {
+			await interaction.reply({
+				embeds: [createErrorEmbed(`I don't have permission to read message history in <#${channel.id}>.`)],
+				ephemeral: true,
+			});
+			return;
+		}
+
+		// 3. Fetch existing config
+		const existingPremiumConfig = await this.container.prisma.premiumGuildRoleConfig.findFirst({
+			where: { guildId: interaction.guildId },
+		});
+
+		let directoryMessage: Message | null = null;
+		let directoryMessageId: string | undefined;
+
+		// 4. Send Initial Message or Use Existing
+		// If config exists, check if channel changes or message ID is missing
+		const needsNewMessage =
+			!existingPremiumConfig ||
+			existingPremiumConfig.clanDirectoryChannelId !== channel.id ||
+			!existingPremiumConfig.clanDirectoryMessageId;
+
+		if (needsNewMessage) {
+			// Try deleting the old message if the channel changed and an old message ID exists
+			if (
+				existingPremiumConfig?.clanDirectoryChannelId &&
+				existingPremiumConfig.clanDirectoryChannelId !== channel.id &&
+				existingPremiumConfig.clanDirectoryMessageId
+			) {
+				try {
+					const oldChannel = (await this.container.client.channels
+						.fetch(existingPremiumConfig.clanDirectoryChannelId)
+						.catch(() => null)) as TextChannel | null;
+					await oldChannel?.messages.delete(existingPremiumConfig.clanDirectoryMessageId).catch(() => {}); // Ignore errors if old message doesn't exist
+				} catch (err) {
+					this.container.logger.warn(
+						`[CLAN DIRECTORY CONFIG] Could not delete old directory message: ${existingPremiumConfig.clanDirectoryMessageId}`,
+						err,
+					);
+				}
+			}
+
+			// Send the initial/new message
+			try {
+				directoryMessage = await (channel as TextChannel).send({
+					embeds: [createInfoEmbed('Clan Directory is initializing...')],
+				});
+				directoryMessageId = directoryMessage.id;
+			} catch (error) {
+				this.container.logger.error(
+					`[CLAN DIRECTORY CONFIG] Failed to send initial message to channel ${channel.id}`,
+					error,
+				);
+				await interaction.reply({
+					embeds: [
+						createErrorEmbed(
+							'Failed to send the initial directory message. Please check my permissions in that channel.',
+						),
+					],
+					ephemeral: true,
+				});
+				return;
+			}
+		} else {
+			// Use existing message ID if channel isn't changing and ID exists
+			directoryMessageId = existingPremiumConfig.clanDirectoryMessageId!;
+		}
+
+		// 5. Update or Create Config in Database
+		const dataToSave = {
+			clanDirectoryChannelId: channel.id,
+			clanDirectoryMessageId: directoryMessageId,
+		};
+
+		if (existingPremiumConfig) {
+			await this.container.prisma.premiumGuildRoleConfig.update({
+				where: { guildId: interaction.guildId },
+				data: dataToSave,
+			});
+		} else {
+			await this.container.prisma.premiumGuildRoleConfig.create({
+				data: { guildId: interaction.guildId, ...dataToSave },
+			});
+		}
+
+		// 6. Respond to User
+		await interaction.reply({
+			embeds: [
+				createInfoEmbed(
+					`✅ Set the clan directory channel to <#${channel.id}>. The directory message ID is \`${directoryMessageId}\`.`,
+				),
+			],
+			ephemeral: true,
+		});
+
+		// Trigger the update task immediately after setting up (optional, but good for immediate feedback)
+		const task = this.container.client.stores.get('tasks').get('UpdateClanDirectory');
+		if (task) {
+			try {
+				await task.run(); // Await the task run
+			} catch (err) {
+				// Catch any errors during the task execution
+				this.container.logger.error('[CLAN DIRECTORY CONFIG] Error running immediate task update:', err);
+			}
+		}
 	}
 }
