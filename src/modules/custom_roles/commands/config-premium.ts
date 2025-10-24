@@ -666,183 +666,206 @@ export class ConfigPremiumCommand extends Subcommand {
 	}
 
 	public override registerApplicationCommands(registry: Subcommand.Registry) {
-		registry.registerChatInputCommand((builder) =>
-			builder
-				.setName(this.name)
-				.setDescription('Handles the configuration of the premium roles in this server')
-				.setDMPermission(false)
-				.setDefaultMemberPermissions(PermissionFlagsBits.ManageRoles)
-				.addSubcommand((subcommand) =>
-					subcommand
-						.setName('show-config')
-						.setDescription('Shows the current configuration for the premium roles in this server'),
-				)
-				.addSubcommand((subcommand) =>
-					subcommand
-						.setName('set-legend-role')
-						.setDescription(
-							'Sets the legend role for this server (allows premium members to gift it to other members)',
-						)
-						.addRoleOption((role) =>
-							role
-								.setName('role')
-								.setDescription('The legend role (leave empty to reset/disable the feature)'),
-						),
-				)
-				.addSubcommand((subcommand) =>
-					subcommand
-						.setName('set-clan-category')
-						.setDescription('Sets the clan category for this server')
-						.addChannelOption((channel) =>
-							channel
-								.setName('category')
-								.setDescription('The clan category')
-								.addChannelTypes(ChannelType.GuildCategory)
-								.setRequired(true),
-						),
-				)
-				.addSubcommand((subcommand) =>
-					subcommand
-						.setName('set-clan-invites-channel')
-						.setDescription('Sets the channel in which clan invites will be sent')
-						.addChannelOption((channel) =>
-							channel
-								.setName('channel')
-								.setDescription('The channel in which to send the clan invites')
-								.addChannelTypes(ChannelType.GuildText)
-								.setRequired(true),
-						),
-				)
-				.addSubcommandGroup((role) =>
-					role
-						.setName('role-abilities')
-						.setDescription('Manage which role gives which ability to the members who have it')
-						.addSubcommand((subcommand) =>
-							subcommand.setName('list').setDescription('Lists the current role abilities'),
-						)
-						.addSubcommand((subcommand) =>
-							subcommand
-								.setName('add')
-								.setDescription('Adds an ability to a role')
-								.addRoleOption((role) =>
-									role
-										.setName('role')
-										.setDescription('The role to add an ability to')
-										.setRequired(true),
-								)
-								.addStringOption((option) =>
-									option
-										.setName('ability')
-										.setDescription('The ability to add')
-										.addChoices(
-											{ name: 'Create a clan', value: 'canCreateClan' },
-											{ name: 'Create a custom role', value: 'canCreateCustomRole' },
-											{ name: 'Gift Legend', value: 'canGiftLegend' },
-											{
-												name: 'Use abilities on multiple servers',
-												value: 'areAbilitiesMultiGuild',
-											},
-										)
-										.setRequired(true),
-								),
-						)
-						.addSubcommand((subcommand) =>
-							subcommand
-								.setName('remove')
-								.setDescription('Removes an ability from a role')
-								.addRoleOption((role) =>
-									role
-										.setName('role')
-										.setDescription('The role to remove an ability from')
-										.setRequired(true),
-								)
-								.addStringOption((option) =>
-									option
-										.setName('ability')
-										.setDescription('The ability to remove')
-										.addChoices(
-											{ name: 'Create a clan', value: 'canCreateClan' },
-											{ name: 'Create a custom role', value: 'canCreateCustomRole' },
-											{ name: 'Gift Legend', value: 'canGiftLegend' },
-											{
-												name: 'Use abilities on multiple servers',
-												value: 'areAbilitiesMultiGuild',
-											},
-										)
-										.setRequired(true),
-								),
-						),
-				)
-				.addSubcommand((subcommand) =>
-					subcommand
-						.setName('set-position-role')
-						.setDescription(
-							'Sets the role that should be used as a starting position for custom premium roles for this server',
-						)
-						.addRoleOption((role) =>
-							role
-								.setName('role')
-								.setDescription('The position role (leave empty to reset/use the premium role)'),
-						),
-				)
-				.addSubcommandGroup((role) =>
-					role
-						.setName('staff-roles')
-						.setDescription(
-							'Manage the staff roles in this server to prevent custom roles from having similar colors',
-						)
-						.addSubcommand((subcommand) =>
-							subcommand.setName('list').setDescription('Lists the current staff roles in this server'),
-						)
-						.addSubcommand((subcommand) =>
-							subcommand
-								.setName('add')
-								.setDescription('Adds a staff role to the list of staff roles')
-								.addRoleOption((role) =>
-									role.setName('role').setDescription('The staff role to add').setRequired(true),
-								),
-						)
-						.addSubcommand((subcommand) =>
-							subcommand
-								.setName('remove')
-								.setDescription('Removes a staff role from the list of staff roles')
-								.addRoleOption((role) =>
-									role.setName('role').setDescription('The staff role to remove').setRequired(true),
-								),
-						),
-				)
-				.addSubcommandGroup((role) =>
-					role
-						.setName('forbidden-names')
-						.setDescription('Manage the forbidden names for custom roles in this server')
-						.addSubcommand((subcommand) =>
-							subcommand
-								.setName('add')
-								.setDescription('Adds a forbidden name to the list of forbidden names')
-								.addStringOption((name) =>
-									name
-										.setName('name')
-										.setDescription('The forbidden name to add (supports regular expressions)')
-										.setRequired(true),
-								),
-						)
-						.addSubcommand((subcommand) =>
-							subcommand
-								.setName('remove')
-								.setDescription('Removes a forbidden name from the list of forbidden names')
-								.addStringOption((name) =>
-									name
-										.setName('name')
-										.setDescription('The forbidden name to remove')
-										.setRequired(true),
-								),
-						)
-						.addSubcommand((subcommand) =>
-							subcommand
-								.setName('list')
-								.setDescription('Shows the current forbidden names in this server'),
-						),
-				),
+		registry.registerChatInputCommand(
+			(builder) =>
+				builder
+					.setName(this.name)
+					.setDescription('Handles the configuration of the premium roles in this server')
+					.setDMPermission(false)
+					.setDefaultMemberPermissions(PermissionFlagsBits.ManageRoles)
+					.addSubcommand((subcommand) =>
+						subcommand
+							.setName('show-config')
+							.setDescription('Shows the current configuration for the premium roles in this server'),
+					)
+					.addSubcommand((subcommand) =>
+						subcommand
+							.setName('set-legend-role')
+							.setDescription(
+								'Sets the legend role for this server (allows premium members to gift it to other members)',
+							)
+							.addRoleOption((role) =>
+								role
+									.setName('role')
+									.setDescription('The legend role (leave empty to reset/disable the feature)'),
+							),
+					)
+					.addSubcommand((subcommand) =>
+						subcommand
+							.setName('set-clan-category')
+							.setDescription('Sets the clan category for this server')
+							.addChannelOption((channel) =>
+								channel
+									.setName('category')
+									.setDescription('The clan category')
+									.addChannelTypes(ChannelType.GuildCategory)
+									.setRequired(true),
+							),
+					)
+					.addSubcommand((subcommand) =>
+						subcommand
+							.setName('set-clan-invites-channel')
+							.setDescription('Sets the channel in which clan invites will be sent')
+							.addChannelOption((channel) =>
+								channel
+									.setName('channel')
+									.setDescription('The channel in which to send the clan invites')
+									.addChannelTypes(ChannelType.GuildText)
+									.setRequired(true),
+							),
+					)
+					.addSubcommandGroup((role) =>
+						role
+							.setName('role-abilities')
+							.setDescription('Manage which role gives which ability to the members who have it')
+							.addSubcommand((subcommand) =>
+								subcommand.setName('list').setDescription('Lists the current role abilities'),
+							)
+							.addSubcommand((subcommand) =>
+								subcommand
+									.setName('add')
+									.setDescription('Adds an ability to a role')
+									.addRoleOption((role) =>
+										role
+											.setName('role')
+											.setDescription('The role to add an ability to')
+											.setRequired(true),
+									)
+									.addStringOption((option) =>
+										option
+											.setName('ability')
+											.setDescription('The ability to add')
+											.addChoices(
+												{ name: 'Create a clan', value: 'canCreateClan' },
+												{ name: 'Create a custom role', value: 'canCreateCustomRole' },
+												{ name: 'Gift Legend', value: 'canGiftLegend' },
+												{
+													name: 'Use abilities on multiple servers',
+													value: 'areAbilitiesMultiGuild',
+												},
+											)
+											.setRequired(true),
+									),
+							)
+							.addSubcommand((subcommand) =>
+								subcommand
+									.setName('remove')
+									.setDescription('Removes an ability from a role')
+									.addRoleOption((role) =>
+										role
+											.setName('role')
+											.setDescription('The role to remove an ability from')
+											.setRequired(true),
+									)
+									.addStringOption((option) =>
+										option
+											.setName('ability')
+											.setDescription('The ability to remove')
+											.addChoices(
+												{ name: 'Create a clan', value: 'canCreateClan' },
+												{ name: 'Create a custom role', value: 'canCreateCustomRole' },
+												{ name: 'Gift Legend', value: 'canGiftLegend' },
+												{
+													name: 'Use abilities on multiple servers',
+													value: 'areAbilitiesMultiGuild',
+												},
+											)
+											.setRequired(true),
+									),
+							),
+					)
+					.addSubcommand((subcommand) =>
+						subcommand
+							.setName('set-position-role')
+							.setDescription(
+								'Sets the role that should be used as a starting position for custom premium roles for this server',
+							)
+							.addRoleOption((role) =>
+								role
+									.setName('role')
+									.setDescription('The position role (leave empty to reset/use the premium role)'),
+							),
+					)
+					.addSubcommandGroup((role) =>
+						role
+							.setName('staff-roles')
+							.setDescription(
+								'Manage the staff roles in this server to prevent custom roles from having similar colors',
+							)
+							.addSubcommand((subcommand) =>
+								subcommand
+									.setName('list')
+									.setDescription('Lists the current staff roles in this server'),
+							)
+							.addSubcommand((subcommand) =>
+								subcommand
+									.setName('add')
+									.setDescription('Adds a staff role to the list of staff roles')
+									.addRoleOption((role) =>
+										role.setName('role').setDescription('The staff role to add').setRequired(true),
+									),
+							)
+							.addSubcommand((subcommand) =>
+								subcommand
+									.setName('remove')
+									.setDescription('Removes a staff role from the list of staff roles')
+									.addRoleOption((role) =>
+										role
+											.setName('role')
+											.setDescription('The staff role to remove')
+											.setRequired(true),
+									),
+							),
+					)
+					.addSubcommandGroup((role) =>
+						role
+							.setName('forbidden-names')
+							.setDescription('Manage the forbidden names for custom roles in this server')
+							.addSubcommand((subcommand) =>
+								subcommand
+									.setName('add')
+									.setDescription('Adds a forbidden name to the list of forbidden names')
+									.addStringOption((name) =>
+										name
+											.setName('name')
+											.setDescription('The forbidden name to add (supports regular expressions)')
+											.setRequired(true),
+									),
+							)
+							.addSubcommand((subcommand) =>
+								subcommand
+									.setName('remove')
+									.setDescription('Removes a forbidden name from the list of forbidden names')
+									.addStringOption((name) =>
+										name
+											.setName('name')
+											.setDescription('The forbidden name to remove')
+											.setRequired(true),
+									),
+							)
+							.addSubcommand((subcommand) =>
+								subcommand
+									.setName('list')
+									.setDescription('Shows the current forbidden names in this server'),
+							),
+					)
+					.addSubcommandGroup((dir) =>
+						dir
+							.setName('directory')
+							.setDescription('Manage the clan directory in this server')
+							.addSubcommand((subcommand) =>
+								subcommand
+									.setName('set-channel')
+									.setDescription('Sets the channel for the clan directory')
+									.addChannelOption((channel) =>
+										channel
+											.setName('channel')
+											.setDescription('The text channel for the directory')
+											.addChannelTypes(ChannelType.GuildText)
+											.setRequired(true),
+									),
+							),
+					),
 		);
 	}
 
@@ -858,122 +881,60 @@ export class ConfigPremiumCommand extends Subcommand {
 			return;
 		}
 
-		// 2. Check Bot Permissions in the target channel
+		// 2. Check Bot Permissions
 		const me = await interaction.guild.members.fetch(this.container.client.user!.id);
 		const permissions = channel.permissionsFor(me);
-
-		if (!permissions.has(PermissionFlagsBits.SendMessages)) {
+		if (!permissions.has(PermissionFlagsBits.SendMessages) || !permissions.has(PermissionFlagsBits.ReadMessageHistory)) {
 			await interaction.reply({
-				embeds: [createErrorEmbed(`I don't have permission to send messages in <#${channel.id}>.`)],
-				ephemeral: true,
-			});
-			return;
-		}
-		// Optional: Check ReadMessageHistory permission too, as the task will need it later
-		if (!permissions.has(PermissionFlagsBits.ReadMessageHistory)) {
-			await interaction.reply({
-				embeds: [createErrorEmbed(`I don't have permission to read message history in <#${channel.id}>.`)],
+				embeds: [createErrorEmbed(`I need permissions to Send Messages and Read Message History in <#${channel.id}>.`)],
 				ephemeral: true,
 			});
 			return;
 		}
 
-		// 3. Fetch existing config
-		const existingPremiumConfig = await this.container.prisma.premiumGuildRoleConfig.findFirst({
-			where: { guildId: interaction.guildId },
-		});
-
-		let directoryMessage: Message | null = null;
-		let directoryMessageId: string | undefined;
-
-		// 4. Send Initial Message or Use Existing
-		// If config exists, check if channel changes or message ID is missing
-		const needsNewMessage =
-			!existingPremiumConfig ||
-			existingPremiumConfig.clanDirectoryChannelId !== channel.id ||
-			!existingPremiumConfig.clanDirectoryMessageId;
-
-		if (needsNewMessage) {
-			// Try deleting the old message if the channel changed and an old message ID exists
-			if (
-				existingPremiumConfig?.clanDirectoryChannelId &&
-				existingPremiumConfig.clanDirectoryChannelId !== channel.id &&
-				existingPremiumConfig.clanDirectoryMessageId
-			) {
-				try {
-					const oldChannel = (await this.container.client.channels
-						.fetch(existingPremiumConfig.clanDirectoryChannelId)
-						.catch(() => null)) as TextChannel | null;
-					await oldChannel?.messages.delete(existingPremiumConfig.clanDirectoryMessageId).catch(() => {}); // Ignore errors if old message doesn't exist
-				} catch (err) {
-					this.container.logger.warn(
-						`[CLAN DIRECTORY CONFIG] Could not delete old directory message: ${existingPremiumConfig.clanDirectoryMessageId}`,
-						err,
-					);
-				}
-			}
-
-			// Send the initial/new message
-			try {
-				directoryMessage = await (channel as TextChannel).send({
-					embeds: [createInfoEmbed('Clan Directory is initializing...')],
-				});
-				directoryMessageId = directoryMessage.id;
-			} catch (error) {
-				this.container.logger.error(
-					`[CLAN DIRECTORY CONFIG] Failed to send initial message to channel ${channel.id}`,
-					error,
-				);
-				await interaction.reply({
-					embeds: [
-						createErrorEmbed(
-							'Failed to send the initial directory message. Please check my permissions in that channel.',
-						),
-					],
-					ephemeral: true,
-				});
-				return;
-			}
-		} else {
-			// Use existing message ID if channel isn't changing and ID exists
-			directoryMessageId = existingPremiumConfig.clanDirectoryMessageId!;
+		// 3. Always Send a New Initial Message
+		let directoryMessage: Message;
+		try {
+			directoryMessage = await (channel as TextChannel).send({ embeds: [createInfoEmbed('Clan Directory is initializing... Please wait for the next update.')] });
+			this.container.logger.info(`[CLAN DIRECTORY CONFIG] Sent initial message ${directoryMessage.id} to channel ${channel.id} for guild ${interaction.guildId}`);
+		} catch (error) {
+			this.container.logger.error(`[CLAN DIRECTORY CONFIG] Failed to send initial message to channel ${channel.id} for guild ${interaction.guildId}`, error);
+			await interaction.reply({
+				embeds: [createErrorEmbed('Failed to send the initial directory message. Please check my permissions in that channel.')],
+				ephemeral: true,
+			});
+			return;
 		}
 
-		// 5. Update or Create Config in Database
+		// 4. Update or Create Config in Database (Upsert)
 		const dataToSave = {
 			clanDirectoryChannelId: channel.id,
-			clanDirectoryMessageId: directoryMessageId,
+			clanDirectoryMessageId: directoryMessage.id, // Save the new message ID
 		};
 
-		if (existingPremiumConfig) {
-			await this.container.prisma.premiumGuildRoleConfig.update({
-				where: { guildId: interaction.guildId },
-				data: dataToSave,
-			});
-		} else {
-			await this.container.prisma.premiumGuildRoleConfig.create({
-				data: { guildId: interaction.guildId, ...dataToSave },
-			});
-		}
+		await this.container.prisma.premiumGuildRoleConfig.upsert({
+			where: { guildId: interaction.guildId },
+			update: dataToSave,
+			create: { guildId: interaction.guildId, ...dataToSave },
+		});
+		this.container.logger.info(`[CLAN DIRECTORY CONFIG] Upserted config for guild ${interaction.guildId} with channel ${channel.id} and message ${directoryMessage.id}`);
 
-		// 6. Respond to User
+
+		// 5. Respond to User
 		await interaction.reply({
-			embeds: [
-				createInfoEmbed(
-					`✅ Set the clan directory channel to <#${channel.id}>. The directory message ID is \`${directoryMessageId}\`.`,
-				),
-			],
+			embeds: [createInfoEmbed(`✅ Set the clan directory channel to <#${channel.id}>. The directory message ID is \`${directoryMessage.id}\`. It will be updated automatically.`)],
 			ephemeral: true,
 		});
 
-		// Trigger the update task immediately after setting up (optional, but good for immediate feedback)
+		// 6. Trigger Immediate Update (Optional but Recommended)
 		const task = this.container.client.stores.get('tasks').get('UpdateClanDirectory');
 		if (task) {
+			this.container.logger.info(`[CLAN DIRECTORY CONFIG] Triggering immediate update task for guild ${interaction.guildId}`);
 			try {
-				await task.run(); // Await the task run
+				// Don't await this directly in the interaction reply flow if it might take time
+				void task.run();
 			} catch (err) {
-				// Catch any errors during the task execution
-				this.container.logger.error('[CLAN DIRECTORY CONFIG] Error running immediate task update:', err);
+				this.container.logger.error('[CLAN DIRECTORY CONFIG] Error triggering immediate task update:', err);
 			}
 		}
 	}

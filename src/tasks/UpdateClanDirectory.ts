@@ -1,5 +1,4 @@
-import { PaginatedMessage } from '@sapphire/discord.js-utilities';
-import { container } from '@sapphire/framework';
+//import { container } from '@sapphire/framework';
 import type { GuildTextBasedChannel, Message, Role } from 'discord.js';
 import { EmbedBuilder } from 'discord.js';
 import { MAX_MEMBERS_IN_CLAN } from '../lib/abilities/ClanManager.js'; // Removed ClanManager import as we don't need the instance here
@@ -69,27 +68,29 @@ export class UpdateClanDirectory extends Task {
 			// Fetch the specific message designated for the directory
 			let message: Message | null = null;
 			try {
+				// Tries to fetch using the ID from the DB
 				message = await channel.messages.fetch(config.clanDirectoryMessageId);
 			} catch {
+				// If fetch fails (message deleted, etc.)
 				this.container.logger.warn(
-					`${header}Directory message ${config.clanDirectoryMessageId} not found in channel ${config.clanDirectoryChannelId} for guild ${guild.name} (${guildId}). Attempting to recreate.`,
+					`${header}Directory message ${config.clanDirectoryMessageId} not found... Attempting to recreate.`,
 				);
-				// If the message doesn't exist, try to send a new one and update the config
 				try {
+					// Send a new one
 					message = await channel.send({ embeds: [createInfoEmbed('Clan Directory is initializing...')] });
+					// Update the DB with the NEW message ID
 					await this.container.prisma.premiumGuildRoleConfig.update({
 						where: { guildId },
 						data: { clanDirectoryMessageId: message.id },
 					});
-					this.container.logger.info(
-						`${header}Recreated directory message with new ID: ${message.id} for guild ${guild.name} (${guildId})`,
-					);
+					this.container.logger.info(`${header}Recreated directory message with new ID: ${message.id}...`);
 				} catch (error) {
+					// If sending the new message fails, log and skip this guild
 					this.container.logger.error(
 						`${header}Failed to recreate directory message for guild ${guild.name} (${guildId})`,
 						error,
 					);
-					continue; // Skip this guild if message creation fails
+					continue;
 				}
 			}
 
@@ -107,9 +108,8 @@ export class UpdateClanDirectory extends Task {
 
 				// Find the owner's user ID from the PremiumMember table
 				const premiumMember = await this.container.prisma.premiumMember.findFirst({
-					where: { guildId: clan.guildId, customRoleId: clan.customRoleId }
+					where: { guildId: clan.guildId, customRoleId: clan.customRoleId },
 				});
-
 
 				allClansData.push({
 					name: clanRole.name,
@@ -125,26 +125,29 @@ export class UpdateClanDirectory extends Task {
 			// Format clan entries
 			const clanEntries = allClansData.map((data, index) => this.formatClanEntry(data, index + 1));
 
-			// Paginate the entries into embed descriptions
-			const pages: string[] = [];
-			for (let i = 0; i < clanEntries.length; i += clansPerPage) {
-				pages.push(clanEntries.slice(i, i + clansPerPage).join('\n\n'));
-			}
-
-			// Create the embeds for each page
+			// Manually chunk the entries into embed descriptions
 			const embeds: EmbedBuilder[] = [];
-			const baseEmbed = createInfoEmbed(null).setTitle(`✨ ${guild.name} Clan Directory ✨`); // Add guild name to title
+			const baseEmbed = createInfoEmbed(null).setTitle(`✨ ${guild.name} Clan Directory ✨`);
 
-			if (pages.length === 0) {
+			if (clanEntries.length === 0) {
 				embeds.push(EmbedBuilder.from(baseEmbed).setDescription('There are currently no clans to display.'));
 			} else {
-				pages.forEach((pageContent, index) => {
+				// Manually chunk the entries
+				for (let i = 0; i < clanEntries.length; i += clansPerPage) {
+					const chunk = clanEntries.slice(i, i + clansPerPage);
 					embeds.push(
 						EmbedBuilder.from(baseEmbed)
-						.setDescription(pageContent)
-						.setFooter({ text: `Page ${index + 1} of ${pages.length} | Total Clans: ${allClansData.length}` }) // Add footer with page info
+							.setDescription(chunk.join('\n\n')) // Join the strings for the description
+							.setFooter({
+								text: `Page ${Math.floor(i / clansPerPage) + 1} of ${Math.ceil(clanEntries.length / clansPerPage)} | Total Clans: ${allClansData.length}`,
+							}),
 					);
-				});
+				}
+			}
+
+			// Ensure we have at least one embed, even if empty
+			if (embeds.length === 0) {
+				embeds.push(EmbedBuilder.from(baseEmbed).setDescription('There are currently no clans to display.'));
 			}
 
 			// Edit the existing message with the first page of the directory
@@ -177,12 +180,15 @@ export class UpdateClanDirectory extends Task {
 		const ownerMention = data.ownerId ? `<@${data.ownerId}>` : '`Unknown Owner`'; // Use mention or fallback text
 
 		// Using block quotes for description for better visual separation
-		const description = data.description.split('\n').map(line => `> ${line}`).join('\n');
+		const description = data.description
+			.split('\n')
+			.map((line) => `> ${line}`)
+			.join('\n');
 
 		return [
 			`**${index}. ${data.name}** ${rank}`, // Clan name and rank
 			`   └─ Owner: ${ownerMention} | Members: **${data.memberCount}**/${MAX_MEMBERS_IN_CLAN}`, // Owner and member count
-			description // Description
+			description, // Description
 		].join('\n');
 	}
 }
