@@ -1,6 +1,9 @@
 import { Subcommand, type SubcommandMappingArray } from '@sapphire/plugin-subcommands';
 import { ChannelType } from 'discord-api-types/v10';
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, Collection, type MessageComponentInteraction } from 'discord.js';
+import { PaginatedMessage } from '@sapphire/discord.js-utilities';
+import { chunk } from '@sapphire/utilities';
+
 import {
 	ClanCreationStatus,
 	ClanDeletionStatus,
@@ -67,6 +70,16 @@ export class ClanCommand extends Subcommand {
 			type: 'method',
 			name: 'toggle-directory',
 			chatInputRun: 'toggleDirectorySubcommand',
+		},
+		{
+			type: 'method',
+			name: 'toggle-directory',
+			chatInputRun: 'toggleDirectorySubcommand',
+		},
+		{
+			type: 'method',
+			name: 'members',
+			chatInputRun: 'membersSubcommand',
 		},
 	];
 
@@ -617,6 +630,72 @@ export class ClanCommand extends Subcommand {
 		}
 	}
 
+	public async membersSubcommand(interaction: Subcommand.ChatInputCommandInteraction<'cached'>) {
+		await interaction.deferReply({ ephemeral: true });
+
+		const clanManager = new ClanManager(interaction.member);
+		const clan = await clanManager.getClan();
+
+		if (!clan) {
+			await interaction.editReply({
+				embeds: [createErrorEmbed('You do not own a clan.')],
+			});
+			return;
+		}
+
+		const clanRole = await clanManager.getCustomRole();
+		const clanName = clanRole ? clanRole.name : 'Your Clan';
+
+		const members = await clanManager.getDiscordClanMembers();
+
+		if (members.size === 0) {
+			// This technically shouldn't happen, as the owner is always a member.
+			await interaction.editReply({
+				embeds: [
+					createErrorEmbed(
+						`You do not seem to have any members in **${clanName}** (not even yourself!). Please contact an admin.`,
+					),
+				],
+			});
+			return;
+		}
+
+		if (members.size === 1 && members.has(interaction.user.id)) {
+			await interaction.editReply({
+				embeds: [createInfoEmbed(`You are the only member in **${clanName}**.`)],
+			});
+			return;
+		}
+
+		const memberList: string[] = [];
+		let count = 1;
+		// Sort members to show owner first, then alphabetically
+		const sortedMembers = Array.from(members.values()).sort((a, b) => {
+			if (a.id === interaction.user.id) return -1;
+			if (b.id === interaction.user.id) return 1;
+			return a.user.tag.localeCompare(b.user.tag);
+		});
+
+		for (const member of sortedMembers) {
+			const isOwner = member.id === interaction.user.id;
+			memberList.push(
+				`**${count++}.** ${member.user.tag} (${member.toString()})${isOwner ? ' ⭐ **(Owner)**' : ''}`,
+			);
+		}
+
+		const paginatedMessage = new PaginatedMessage({
+			template: createInfoEmbed(null).setTitle(`Members of ${clanName} (${members.size}/${MAX_MEMBERS_IN_CLAN})`),
+		});
+
+		const memberChunks = chunk(memberList, 10); // 10 members per page
+
+		for (const page of memberChunks) {
+			paginatedMessage.addPageEmbed((embed) => embed.setDescription(page.join('\n\n')));
+		}
+
+		await paginatedMessage.run(interaction);
+	}
+
 	public override registerApplicationCommands(registry: Subcommand.Registry) {
 		registry.registerChatInputCommand((builder) =>
 			builder
@@ -699,6 +778,9 @@ export class ClanCommand extends Subcommand {
 					subcommand
 						.setName('toggle-directory')
 						.setDescription('Toggles whether your clan appears in the clan directory listing.'),
+				)
+				.addSubcommand((subcommand) =>
+					subcommand.setName('members').setDescription('Lists all members currently in your clan.'),
 				),
 		);
 	}
