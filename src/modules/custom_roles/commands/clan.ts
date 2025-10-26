@@ -63,6 +63,11 @@ export class ClanCommand extends Subcommand {
 			name: 'set-description',
 			chatInputRun: 'setDescriptionSubcommand',
 		},
+		{
+			type: 'method',
+			name: 'toggle-directory',
+			chatInputRun: 'toggleDirectorySubcommand',
+		},
 	];
 
 	public async createSubcommand(interaction: Subcommand.ChatInputCommandInteraction<'cached'>) {
@@ -689,7 +694,81 @@ export class ClanCommand extends Subcommand {
 								.setMaxLength(100)
 								.setRequired(true),
 						),
+				)
+				.addSubcommand((subcommand) =>
+					subcommand
+						.setName('toggle-directory')
+						.setDescription('Toggles whether your clan appears in the clan directory listing.'),
 				),
 		);
+	}
+
+	public async toggleDirectorySubcommand(interaction: Subcommand.ChatInputCommandInteraction<'cached'>) {
+		await interaction.deferReply({ ephemeral: true });
+
+		const clanManager = new ClanManager(interaction.member);
+		const clan = await clanManager.getClan();
+
+		if (!clan) {
+			await interaction.editReply({
+				embeds: [createErrorEmbed('You do not own a clan.')],
+			});
+			return;
+		}
+
+		const customRoleId = await clanManager.getCustomRoleId();
+		if (clan.customRoleId !== customRoleId) {
+			await interaction.editReply({
+				embeds: [createErrorEmbed('Could not verify clan ownership.')],
+			});
+			return;
+		}
+
+		const newVisibilityState = !clan.isVisibleInDirectory;
+
+		try {
+			await this.container.prisma.clan.update({
+				where: {
+					guildId_customRoleId: {
+						guildId: clan.guildId,
+						customRoleId: clan.customRoleId,
+					},
+				},
+				data: {
+					isVisibleInDirectory: newVisibilityState,
+				},
+			});
+
+			clanManager.invalidateCache('clan');
+
+			await interaction.editReply({
+				embeds: [
+					createInfoEmbed(
+						`✅ Your clan will now be ${newVisibilityState ? '**visible**' : '**hidden**'} in the directory. The change will appear after the next update.`,
+					),
+				],
+			});
+
+			// Trigger directory update immediately / Optional
+			const task = this.container.client.stores.get('tasks').get('UpdateClanDirectory');
+			if (task) {
+				this.container.logger.info(
+					`[CLAN TOGGLE DIRECTORY] Triggering immediate directory update task for guild ${interaction.guildId}`,
+				);
+				void task.run();
+			}
+		} catch (error) {
+			this.container.logger.error(
+				`[CLAN TOGGLE DIRECTORY] Failed to update visibility for clan ${clan.customRoleId} in guild ${clan.guildId}`,
+				error,
+			);
+			await interaction.editReply({
+				embeds: [
+					createErrorEmbed(
+						'An error occurred while trying to update the directory visibility. Please try again later.',
+					),
+				],
+			});
+		}
 	}
 }
