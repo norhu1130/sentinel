@@ -7,8 +7,11 @@ import {
 	ButtonStyle,
 	ChatInputCommandInteraction,
 	EmbedBuilder,
+	InteractionContextType, // Added this import
 	PermissionsBitField,
 	type ApplicationCommandOptionChoiceData,
+	time,
+	TimestampStyles,
 } from 'discord.js';
 import { ClanManager, MAX_MEMBERS_IN_CLAN } from '../lib/abilities/ClanManager.js';
 import { createErrorEmbed, createInfoEmbed } from '../lib/utils/createEmbed.js';
@@ -27,6 +30,19 @@ export class RequestJoinClanCommand extends Command {
 		await interaction.deferReply({ ephemeral: true });
 
 		const targetClanRoleId = interaction.options.getString('clan', true);
+
+		// check for '__NONE__'
+		if (targetClanRoleId === '__NONE__') {
+			await interaction.editReply({
+				embeds: [
+					createErrorEmbed(
+						'No visible clans matched your search. The clan you are looking for might be private or does not exist.',
+					),
+				],
+			});
+			return;
+		}
+
 		const userMessage = interaction.options.getString('message');
 		const requester = interaction.member;
 
@@ -43,7 +59,7 @@ export class RequestJoinClanCommand extends Command {
 		});
 
 		if (!clan) {
-			await interaction.editReply({ embeds: [createErrorEmbed('That role does not seem to belong to a clan.')] });
+			await interaction.editReply({ embeds: [createErrorEmbed('This does not seem to be a valid clan.')] });
 			return;
 		}
 
@@ -116,10 +132,12 @@ export class RequestJoinClanCommand extends Command {
 		const cooldownExpires = requestCooldowns.get(cooldownKey) ?? 0;
 
 		if (now < cooldownExpires) {
-			const remainingSeconds = Math.ceil((cooldownExpires - now) / 1000);
+			const cooldownTimestamp = Math.floor(cooldownExpires / 1000);
 			await interaction.editReply({
 				embeds: [
-					createErrorEmbed(`You can send another request to this clan owner in ${remainingSeconds} seconds.`),
+					createErrorEmbed(
+						`You can send another request to this clan owner ${time(cooldownTimestamp, TimestampStyles.RelativeTime)}.`,
+					),
 				],
 			});
 			return;
@@ -161,9 +179,9 @@ export class RequestJoinClanCommand extends Command {
 				.setColor(targetClanRole.color || 'Blurple')
 				.setTitle(`📥 Clan Join Request: ${targetClanRole.name}`)
 				.setDescription(
-					`${clanOwnerMember.toString()}, ${requester.user.tag} (${requester.toString()}) has requested to join your clan.`,
+					`<@${premiumOwner.userId}>, ${requester.user.tag} (${requester.toString()}) has requested to join your clan.`,
 				)
-				.setThumbnail(requester.user.displayAvatarURL())
+				.setThumbnail(requester.displayAvatarURL())
 				.addFields({ name: 'Members', value: `${clan.members.length}/${MAX_MEMBERS_IN_CLAN}`, inline: true })
 				.setTimestamp();
 
@@ -235,18 +253,10 @@ export class RequestJoinClanCommand extends Command {
 				if (options.length >= 25) break;
 				if (addedRoles.has(role.id)) continue;
 
-				if (role.name.toLowerCase().includes(input)) {
+				if (role.name.toLowerCase().includes(input) || role.id == input) {
 					options.push({ name: trimPretty(role.name, 97), value: role.id });
 					addedRoles.add(role.id);
 				}
-			}
-			// Add remaining if space allows
-			for (const role of clanRoles.values()) {
-				if (options.length >= 25) break;
-				if (addedRoles.has(role.id)) continue;
-
-				options.push({ name: trimPretty(role.name, 97), value: role.id });
-				addedRoles.add(role.id);
 			}
 
 			// Sort alphabetically for better UX
@@ -263,7 +273,7 @@ export class RequestJoinClanCommand extends Command {
 			builder
 				.setName('request-join-clan')
 				.setDescription(this.description)
-				.setDMPermission(false)
+				.setContexts(InteractionContextType.Guild) // Changed this line
 				.addStringOption((option) =>
 					option
 						.setName('clan')
@@ -275,7 +285,7 @@ export class RequestJoinClanCommand extends Command {
 					option
 						.setName('message')
 						.setDescription('An optional message to send with your request.')
-						.setMaxLength(200)
+						.setMaxLength(1000)
 						.setRequired(false),
 				),
 		);

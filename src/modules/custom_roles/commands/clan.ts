@@ -1,6 +1,16 @@
 import { Subcommand, type SubcommandMappingArray } from '@sapphire/plugin-subcommands';
 import { ChannelType } from 'discord-api-types/v10';
-import { ActionRowBuilder, ButtonBuilder, ButtonStyle, Collection, type MessageComponentInteraction } from 'discord.js';
+import { 
+	ActionRowBuilder, 
+	ButtonBuilder, 
+	ButtonStyle, 
+	Collection, 
+	type MessageComponentInteraction,
+	type AutocompleteInteraction,
+	type ApplicationCommandOptionChoiceData,
+	EmbedBuilder,
+	PermissionsBitField,
+} from 'discord.js';
 import { PaginatedMessage } from '@sapphire/discord.js-utilities';
 import { chunk } from '@sapphire/utilities';
 
@@ -14,6 +24,8 @@ import {
 import { MemberAbilities } from '../../../lib/abilities/MemberAbilities.js';
 import { createErrorEmbed, createInfoEmbed } from '../../../lib/utils/createEmbed.js';
 import { waitForButtonConfirm } from '../../../lib/utils/waitForInteraction.js';
+import { trimPretty } from '../../../lib/utils/trim.js';
+import { makeClanJoinRequestId } from '../../../interaction-handlers/clan-join-request.js';
 
 const clanInviteCooldown = 60 * 60_000; // 60 seconds * 60 minutes * 24 hours = 1 hour
 const clanInviteDelayString = 'an hour';
@@ -696,6 +708,75 @@ export class ClanCommand extends Subcommand {
 		await paginatedMessage.run(interaction);
 	}
 
+	public async toggleDirectorySubcommand(interaction: Subcommand.ChatInputCommandInteraction<'cached'>) {
+		await interaction.deferReply({ ephemeral: true });
+
+		const clanManager = new ClanManager(interaction.member);
+		const clan = await clanManager.getClan();
+
+		if (!clan) {
+			await interaction.editReply({
+				embeds: [createErrorEmbed('You do not own a clan.')],
+			});
+			return;
+		}
+
+		const customRoleId = await clanManager.getCustomRoleId();
+		if (clan.customRoleId !== customRoleId) {
+			await interaction.editReply({
+				embeds: [createErrorEmbed('Could not verify clan ownership.')],
+			});
+			return;
+		}
+
+		const newVisibilityState = !clan.isVisibleInDirectory;
+
+		try {
+			await this.container.prisma.clan.update({
+				where: {
+					guildId_customRoleId: {
+						guildId: clan.guildId,
+						customRoleId: clan.customRoleId,
+					},
+				},
+				data: {
+					isVisibleInDirectory: newVisibilityState,
+				},
+			});
+
+			clanManager.invalidateCache('clan');
+
+			await interaction.editReply({
+				embeds: [
+					createInfoEmbed(
+						`✅ Your clan will now be ${newVisibilityState ? '**visible**' : '**hidden**'} in the directory. The change will appear after the next update.`,
+					),
+				],
+			});
+
+			// Trigger directory update immediately / Optional
+			const task = this.container.client.stores.get('tasks').get('UpdateClanDirectory');
+			if (task) {
+				this.container.logger.info(
+					`[CLAN TOGGLE DIRECTORY] Triggering immediate directory update task for guild ${interaction.guildId}`,
+				);
+				void task.run();
+			}
+		} catch (error) {
+			this.container.logger.error(
+				`[CLAN TOGGLE DIRECTORY] Failed to update visibility for clan ${clan.customRoleId} in guild ${clan.guildId}`,
+				error,
+			);
+			await interaction.editReply({
+				embeds: [
+					createErrorEmbed(
+						'An error occurred while trying to update the directory visibility. Please try again later.',
+					),
+				],
+			});
+		}
+	}
+
 	public override registerApplicationCommands(registry: Subcommand.Registry) {
 		registry.registerChatInputCommand((builder) =>
 			builder
@@ -783,74 +864,5 @@ export class ClanCommand extends Subcommand {
 					subcommand.setName('members').setDescription('Lists all members currently in your clan.'),
 				),
 		);
-	}
-
-	public async toggleDirectorySubcommand(interaction: Subcommand.ChatInputCommandInteraction<'cached'>) {
-		await interaction.deferReply({ ephemeral: true });
-
-		const clanManager = new ClanManager(interaction.member);
-		const clan = await clanManager.getClan();
-
-		if (!clan) {
-			await interaction.editReply({
-				embeds: [createErrorEmbed('You do not own a clan.')],
-			});
-			return;
-		}
-
-		const customRoleId = await clanManager.getCustomRoleId();
-		if (clan.customRoleId !== customRoleId) {
-			await interaction.editReply({
-				embeds: [createErrorEmbed('Could not verify clan ownership.')],
-			});
-			return;
-		}
-
-		const newVisibilityState = !clan.isVisibleInDirectory;
-
-		try {
-			await this.container.prisma.clan.update({
-				where: {
-					guildId_customRoleId: {
-						guildId: clan.guildId,
-						customRoleId: clan.customRoleId,
-					},
-				},
-				data: {
-					isVisibleInDirectory: newVisibilityState,
-				},
-			});
-
-			clanManager.invalidateCache('clan');
-
-			await interaction.editReply({
-				embeds: [
-					createInfoEmbed(
-						`✅ Your clan will now be ${newVisibilityState ? '**visible**' : '**hidden**'} in the directory. The change will appear after the next update.`,
-					),
-				],
-			});
-
-			// Trigger directory update immediately / Optional
-			const task = this.container.client.stores.get('tasks').get('UpdateClanDirectory');
-			if (task) {
-				this.container.logger.info(
-					`[CLAN TOGGLE DIRECTORY] Triggering immediate directory update task for guild ${interaction.guildId}`,
-				);
-				void task.run();
-			}
-		} catch (error) {
-			this.container.logger.error(
-				`[CLAN TOGGLE DIRECTORY] Failed to update visibility for clan ${clan.customRoleId} in guild ${clan.guildId}`,
-				error,
-			);
-			await interaction.editReply({
-				embeds: [
-					createErrorEmbed(
-						'An error occurred while trying to update the directory visibility. Please try again later.',
-					),
-				],
-			});
-		}
 	}
 }
