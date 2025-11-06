@@ -111,13 +111,14 @@ export class UpdateClanDirectory extends Task {
 						description: clan.description ?? 'No description set.',
 						memberCount: clan.members.length,
 						ownerId: premiumMember?.userId,
+						customRoleId: clan.customRoleId,
 					});
 				}
 				this.container.logger.info(
 					`${header}Prepared data for ${allClansData.length} visible clans in guild ${guildId}.`,
 				);
 				// Sort clans by member count
-				allClansData.sort((a, b) => b.memberCount - a.memberCount);
+				allClansData.sort((a, b) => (BigInt(a.customRoleId) < BigInt(b.customRoleId) ? -1 : 1));
 			}
 
 			const clanEntries = allClansData.map((data, index) => this.formatClanEntry(data, index + 1));
@@ -176,7 +177,7 @@ export class UpdateClanDirectory extends Task {
 		const description = data.description
 			.split('\n')
 			.map((line) => `> ${line.trim()}`)
-			.join('\n'); 
+			.join('\n');
 
 		return [
 			`**${index}. ${data.name}** ${rank}`,
@@ -191,4 +192,5 @@ interface ClanDirectoryData {
 	description: string;
 	memberCount: number;
 	ownerId?: string | null;
+	customRoleId: string;
 }
