@@ -190,7 +190,7 @@ export class ClanJoinRequestHandler extends InteractionHandler {
 
 			// --- Perform Validations using ClanManager data ---
 			this.container.logger.info(
-				`[CLAN JOIN REQ HANDLER] Validating clan capacity (${memberCount}/${MAX_MEMBERS_IN_CLAN}), existing membership, other memberships.`,
+				`[CLAN JOIN REQ HANDLER] Validating clan capacity (${memberCount}/${MAX_MEMBERS_IN_CLAN}), existing membership.`,
 			);
 
 			if (memberCount >= MAX_MEMBERS_IN_CLAN) {
@@ -211,34 +211,9 @@ export class ClanJoinRequestHandler extends InteractionHandler {
 				return;
 			}
 
-			const existingMembership = await this.container.prisma.clanMember.findFirst({
-				where: { userId: requester.id, clanGuildId: interaction.guildId },
-			});
-			if (existingMembership) {
-				await updateOriginalMessage('Requester In Another Clan');
-				const existingClan = await this.container.prisma.clan.findUnique({
-					where: {
-						guildId_customRoleId: {
-							guildId: existingMembership.clanGuildId,
-							customRoleId: existingMembership.clanCustomRoleId,
-						},
-					},
-				});
-				const existingClanRole =
-					existingClan ?
-						await interaction.guild.roles.fetch(existingClan.customRoleId).catch(() => null)
-					:	null;
-				const clanName = existingClanRole ? `**${existingClanRole.name}**` : 'another clan';
-				await interaction.followUp({
-					embeds: [
-						createErrorEmbed(
-							`${requester.user.tag} is already a member of ${clanName}. They must leave it first.`,
-						),
-					],
-					ephemeral: true,
-				});
-				return;
-			}
+			// --- START OF MODIFIED LOGIC ---
+			// Removed the check for `existingMembership` as users can be in multiple clans.
+			// --- END OF MODIFIED LOGIC ---
 
 			// Attempt to add member
 			this.container.logger.info(
