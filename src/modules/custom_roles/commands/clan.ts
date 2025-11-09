@@ -825,27 +825,50 @@ export class ClanCommand extends Subcommand {
 
 		const members = await clanManager.getDiscordClanMembers();
 
+		// --- Define Constants ---
+		const SEPARATOR = '<:__:1436841453123797012>';
+		// const CONNECTION1 = '<:C1:1436457103781920858>'; // Not used
+		const EMBED_COLOR = 0x27272f;
+		const titanIconURL = 'https://cdn.discordapp.com/emojis/1436840358112657562.png?size=128';
+		const thumbnailURL = clanRole?.iconURL({ extension: 'png', size: 128 }) ?? titanIconURL;
+		const embedTitle = `## ${clanName} Members (${members.size}/${MAX_MEMBERS_IN_CLAN})`;
+
+		// --- Handle No Members ---
 		if (members.size === 0) {
 			// This technically shouldn't happen, as the owner is always a member.
 			await interaction.editReply({
 				embeds: [
-					createErrorEmbed(
-						`You do not seem to have any members in **${clanName}** (not even yourself!). Please contact an admin.`,
-					),
+					new EmbedBuilder()
+						.setColor(EMBED_COLOR)
+						.setThumbnail(thumbnailURL)
+						.setDescription(
+							`${embedTitle}\n${SEPARATOR}\nThis clan has no members. This is an error, please contact an admin.`,
+						),
 				],
 			});
 			return;
 		}
 
+		// --- Handle Single Member (Owner) ---
 		if (members.size === 1 && members.has(interaction.user.id)) {
+			const member = members.first()!;
+			const memberIcon = '⭐'; // Must be the owner
+			const entry = [`${memberIcon}  **${member.user.tag}** (${member.toString()})`].join('\n');
+
 			await interaction.editReply({
-				embeds: [createInfoEmbed(`You are the only member in **${clanName}**.`)],
+				embeds: [
+					new EmbedBuilder()
+						.setColor(EMBED_COLOR)
+						.setThumbnail(thumbnailURL)
+						.setDescription(`${embedTitle}\n${SEPARATOR}\n${entry}`),
+				],
 			});
 			return;
 		}
 
+		// --- Handle Multiple Members (Paginated) ---
 		const memberList: string[] = [];
-		let count = 1;
+
 		// Sort members to show owner first, then alphabetically
 		const sortedMembers = Array.from(members.values()).sort((a, b) => {
 			if (a.id === interaction.user.id) return -1;
@@ -855,19 +878,23 @@ export class ClanCommand extends Subcommand {
 
 		for (const member of sortedMembers) {
 			const isOwner = member.id === interaction.user.id;
-			memberList.push(
-				`**${count++}.** ${member.user.tag} (${member.toString()})${isOwner ? ' ⭐ **(Owner)**' : ''}`,
-			);
+			const memberIcon = isOwner ? '⭐' : '👤'; // Using simple emoji for icon
+
+			const entry = [`${memberIcon}  **${member.user.tag}** (${member.toString()})`].join('\n');
+
+			memberList.push(entry);
 		}
 
 		const paginatedMessage = new PaginatedMessage({
-			template: createInfoEmbed(null).setTitle(`Members of ${clanName} (${members.size}/${MAX_MEMBERS_IN_CLAN})`),
+			template: new EmbedBuilder().setColor(EMBED_COLOR).setThumbnail(thumbnailURL),
 		});
 
-		const memberChunks = chunk(memberList, 10); // 10 members per page
+		const memberChunks = chunk(memberList, 5); // 5 members per page
 
 		for (const page of memberChunks) {
-			paginatedMessage.addPageEmbed((embed) => embed.setDescription(page.join('\n\n')));
+			paginatedMessage.addPageEmbed((embed) =>
+				embed.setDescription(`${embedTitle}\n${SEPARATOR}\n` + page.join(`\n${SEPARATOR}\n`)),
+			);
 		}
 
 		await paginatedMessage.run(interaction);
