@@ -1,10 +1,10 @@
 import type { Clan, ClanMember, PremiumMember } from '@prisma/client';
 import { container } from '@sapphire/framework';
+import { Duration } from '@sapphire/time-utilities';
 import { ChannelType } from 'discord-api-types/v10';
-import type { CategoryChannel, Guild, GuildMember, Role, TextChannel } from 'discord.js';
+import type {CategoryChannel, Guild, GuildMember, NonThreadGuildBasedChannel, Role, TextChannel} from 'discord.js';
 import { Collection } from 'discord.js';
 import { MemberAbilities } from './MemberAbilities.js';
-import { Duration } from '@sapphire/time-utilities';
 
 export const MAX_MEMBERS_IN_CLAN = 40;
 
@@ -530,11 +530,31 @@ export class ClanManager {
 		const clanMemberAddStatus = await this.inviteMember(this.userId, true);
 
 		if (clanMemberAddStatus !== ClanMemberAddStatus.Added) {
-			container.logger.info(
+			container.logger.error(
 				`[CLAN ${this.userId}] Could not add owner back: `,
 				ClanManager.getMemberAddStatusMessage(clanMemberAddStatus),
 			);
+
+			return;
 		}
+
+		const channel = await this.getClanChannel();
+
+		if (!channel) {
+			container.logger.error(
+				`[CLAN ${this.userId}] Clan channel does not seem to exist anymore.`,
+			);
+
+			return;
+		}
+
+		await this.giveOwnerPermissions(channel, this.userId)
+			.catch((error: Error) => {
+				container.logger.error(
+					`[CLAN ${this.userId}] Restoring clan channel permissions setting for owner failed: `,
+					error,
+				);
+			});
 	}
 
 	public async deleteOrphanClan(): Promise<void> {
@@ -747,15 +767,9 @@ export class ClanManager {
 					error,
 				);
 			});
-		await clanChannel.permissionOverwrites
-			.edit(this.userId, {
-				ViewChannel: true,
-				ManageChannels: true,
-				ManageMessages: true,
-				CreatePrivateThreads: true,
-				MentionEveryone: true,
-			})
-			.catch((error) => {
+
+		await this.giveOwnerPermissions(clanChannel, this.userId)
+			.catch((error: Error) => {
 				errorHappened = true;
 				container.logger.info(
 					`[CLAN ${this.userId}] Clan channel permissions setting for owner failed: `,
@@ -769,6 +783,17 @@ export class ClanManager {
 		}
 
 		return clanChannel;
+	}
+
+	private async giveOwnerPermissions(channel: TextChannel, ownerId: string): Promise<NonThreadGuildBasedChannel> {
+		return channel.permissionOverwrites
+			.edit(ownerId, {
+				ViewChannel: true,
+				ManageChannels: true,
+				ManageMessages: true,
+				CreatePrivateThreads: true,
+				MentionEveryone: true,
+			});
 	}
 
 	private async getPremiumMember(): Promise<PremiumMember | null> {
