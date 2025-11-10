@@ -826,10 +826,10 @@ export class ClanCommand extends Subcommand {
 		const members = await clanManager.getDiscordClanMembers();
 
 		// --- Define Constants ---
-		const SEPARATOR = '<:__:1436841453123797012>';
+		const SEPARATOR = '<:valBlank:806719192191336448>';
 		// const CONNECTION1 = '<:C1:1436457103781920858>'; // Not used
 		const EMBED_COLOR = 0x27272f;
-		const titanIconURL = 'https://cdn.discordapp.com/emojis/1436840358112657562.png?size=128';
+		const titanIconURL = 'https://cdn.discordapp.com/emojis/1181684178467696680.png?size=128';
 		const thumbnailURL = clanRole?.iconURL({ extension: 'png', size: 128 }) ?? titanIconURL;
 		const embedTitle = `## ${clanName} Members (${members.size}/${MAX_MEMBERS_IN_CLAN})`;
 
