@@ -164,6 +164,7 @@ export class UpdateClanDirectory extends Task {
 	private async syncRoleIconsAsAppEmojis(
 		clans: ClanDirectoryData[],
 	): Promise<Map<string, { id: string; name: string }>> {
+		
 		const APPLICATION_ID = this.container.client.application!.id;
 		const rest = this.container.client.rest;
 		const emojiMap = new Map<string, { id: string; name: string }>();
@@ -184,19 +185,15 @@ export class UpdateClanDirectory extends Task {
 
 		let existing: any[] = [];
 		try {
-			const response = (await rest.get(
-				Routes.applicationEmojis(APPLICATION_ID),
-			)) as RESTGetAPIApplicationEmojisResult;
-
+			const response = (await rest.get(Routes.applicationEmojis(APPLICATION_ID))) as RESTGetAPIApplicationEmojisResult;
+		
 			if (response && Array.isArray(response.items)) {
 				existing = response.items;
 			} else {
-				this.container.logger.warn(
-					'[ICON SYNC] Unexpected response format from applicationEmojis API',
-					response,
-				);
+				this.container.logger.warn('[ICON SYNC] Unexpected response format from applicationEmojis API', response);
 				existing = [];
 			}
+			
 		} catch (err) {
 			this.container.logger.error('[ICON SYNC] Failed to fetch existing application emojis:', err);
 			existing = [];
