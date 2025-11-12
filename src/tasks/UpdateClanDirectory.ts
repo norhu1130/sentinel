@@ -7,17 +7,19 @@ import { Task } from '../lib/schedule/tasks/Task.js';
 import { createInfoEmbed } from '../lib/utils/createEmbed.js';
 
 const header = '[CLAN DIRECTORY] ';
+
+
 const clansPerPage = 10;
 
 // Emojis and icons
 const CONNECTION1 = '<:ConnectionContinuing:1436843068438351944>';
 const CONNECTION2 = '<:ConnectionEnding:1436843084985143449>';
 const SEPARATOR = '<:valBlank:806719192191336448>';
-const FALLBACK_ICON = '<:icon_Titan:1181684178467696680>'; // Titan fallback emoji
+const FALLBACK_ICON = '<:icon_Titan:1181684178467696680>';
 
 export class UpdateClanDirectory extends Task {
 	public async run() {
-		this.container.logger.info(`${header}Starting clan directory update...`);
+		this.container.logger.info(`${header}Starting clan directory update (TEST MODE: 1 per embed)...`);
 
 		const visibleClans = await this.container.prisma.clan.findMany({
 			where: { isVisibleInDirectory: true },
@@ -99,40 +101,41 @@ export class UpdateClanDirectory extends Task {
 
 			for (let i = 0; i < allClansData.length; i += clansPerPage) {
 				const chunk = allClansData.slice(i, i + clansPerPage);
-				const embed = new EmbedBuilder()
-					.setColor(0x27272f)
-					.setDescription(`## ${guild.name} Clan Discovery\n${SEPARATOR}`)
-					.setThumbnail(guild.iconURL({ extension: 'png', size: 128 }) ?? null);
+				const data = chunk[0];
+				if (!data) continue;
 
-				const fields: any[] = [];
+				const emoji = emojiMap.get(data.customRoleId);
+				const roleIcon = emoji ? `<:${emoji.name}:${emoji.id}>` : FALLBACK_ICON;
+				const ownerMention = data.ownerId ? `<@${data.ownerId}>` : '`Unknown Owner`';
+				const descriptionText = data.description || '*No description set*';
 
-				for (const data of chunk) {
-					const emoji = emojiMap.get(data.customRoleId);
-					const roleIcon = emoji ? `<:${emoji.name}:${emoji.id}>` : FALLBACK_ICON;
+				const embed = new EmbedBuilder().setColor(0x27272f);
 
-					const ownerMention = data.ownerId ? `<@${data.ownerId}>` : '`Unknown Owner`';
-					const descriptionText = data.description || '*No description set*';
-
-					fields.push({
-						name: `${roleIcon}  ${data.name}`,
-						value: [
-							`-# ${CONNECTION1} Owner: ${ownerMention}`,
-							`-# ${CONNECTION1} Members: \`${data.memberCount}\` / ${MAX_MEMBERS_IN_CLAN}`,
-							`-# ${CONNECTION2} Description: ${descriptionText}`,
-						].join('\n'),
-						inline: false,
-					});
-
-					fields.push({ name: ' ', value: SEPARATOR, inline: false });
+				// Add header & thumbnail only to first embed
+				if (i === 0) {
+					embed
+						.setDescription(`## ${guild.name} Clan Discovery\n${SEPARATOR}`)
+						.setThumbnail(guild.iconURL({ extension: 'png', size: 128 }) ?? null);
 				}
 
-				fields.push({
-					name: ' ',
-					value: `-# Last updated <t:${Math.floor(Date.now() / 1000)}:R>`,
+				embed.addFields({
+					name: `${roleIcon}  ${data.name}`,
+					value: [
+						`-# ${CONNECTION1} Owner: ${ownerMention}`,
+						`-# ${CONNECTION1} Members: \`${data.memberCount}\` / ${MAX_MEMBERS_IN_CLAN}`,
+						`-# ${CONNECTION2} Description: ${descriptionText}`,
+					].join('\n'),
 					inline: false,
 				});
 
-				embed.setFields(fields);
+				// Add footer only on the last embed
+				if (i + clansPerPage >= allClansData.length) {
+					embed.addFields({
+						name: ' ',
+						value: `-# Last updated <t:${Math.floor(Date.now() / 1000)}:R>`,
+						inline: false,
+					});
+				}
 
 				embeds.push(embed);
 			}
@@ -147,8 +150,33 @@ export class UpdateClanDirectory extends Task {
 			}
 
 			try {
-				await message.edit({ embeds: [embeds[0]], components: [] });
-				this.container.logger.info(`${header}Updated clan directory for ${guild.name}.`);
+				const MAX_EMBEDS_PER_MESSAGE = 10;
+
+				if (embeds.length <= MAX_EMBEDS_PER_MESSAGE) {
+					await message.edit({ embeds, components: [] });
+				} else {
+					const chunks: EmbedBuilder[][] = [];
+					for (let i = 0; i < embeds.length; i += MAX_EMBEDS_PER_MESSAGE) {
+						chunks.push(embeds.slice(i, i + MAX_EMBEDS_PER_MESSAGE));
+					}
+
+					await message.edit({ embeds: chunks[0], components: [] });
+
+					const existingMessages = await channel.messages.fetch({ limit: 20 });
+					const oldDirectoryMessages = existingMessages.filter(
+						(m) => m.author.id === this.container.client.user?.id && m.id !== message.id,
+					);
+
+					for (const old of oldDirectoryMessages.values()) {
+						await old.delete().catch(() => null);
+					}
+
+					for (let i = 1; i < chunks.length; i++) {
+						await channel.send({ embeds: chunks[i] });
+					}
+				}
+
+				this.container.logger.info(`${header}Updated clan directory for ${guild.name} (${embeds.length} embeds).`);
 			} catch (error) {
 				this.container.logger.error(`${header}Failed to edit clan directory for ${guild.name}`, error);
 			}
@@ -158,18 +186,13 @@ export class UpdateClanDirectory extends Task {
 		return null;
 	}
 
-	/**
-	 * Uploads role icons as application emojis (to the bot's 2000-slot emoji pool).
-	 */
 	private async syncRoleIconsAsAppEmojis(
 		clans: ClanDirectoryData[],
 	): Promise<Map<string, { id: string; name: string }>> {
-		
 		const APPLICATION_ID = this.container.client.application!.id;
 		const rest = this.container.client.rest;
 		const emojiMap = new Map<string, { id: string; name: string }>();
 
-		// download helper
 		const downloadBuffer = (url: string): Promise<Buffer> =>
 			new Promise((resolve, reject) => {
 				get(url, (res) => {
@@ -185,15 +208,19 @@ export class UpdateClanDirectory extends Task {
 
 		let existing: any[] = [];
 		try {
-			const response = (await rest.get(Routes.applicationEmojis(APPLICATION_ID))) as RESTGetAPIApplicationEmojisResult;
-		
+			const response = (await rest.get(
+				Routes.applicationEmojis(APPLICATION_ID),
+			)) as RESTGetAPIApplicationEmojisResult;
+
 			if (response && Array.isArray(response.items)) {
 				existing = response.items;
 			} else {
-				this.container.logger.warn('[ICON SYNC] Unexpected response format from applicationEmojis API', response);
+				this.container.logger.warn(
+					'[ICON SYNC] Unexpected response format from applicationEmojis API',
+					response,
+				);
 				existing = [];
 			}
-			
 		} catch (err) {
 			this.container.logger.error('[ICON SYNC] Failed to fetch existing application emojis:', err);
 			existing = [];
