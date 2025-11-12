@@ -1,7 +1,7 @@
 import type { GuildTextBasedChannel, Message, Role } from 'discord.js';
 import { EmbedBuilder } from 'discord.js';
 import { get } from 'https';
-import { Routes } from 'discord-api-types/v10';
+import { Routes, type RESTGetAPIApplicationEmojisResult } from 'discord-api-types/v10';
 import { MAX_MEMBERS_IN_CLAN } from '../lib/abilities/ClanManager.js';
 import { Task } from '../lib/schedule/tasks/Task.js';
 import { createInfoEmbed } from '../lib/utils/createEmbed.js';
@@ -14,10 +14,6 @@ const CONNECTION1 = '<:ConnectionContinuing:1436843068438351944>';
 const CONNECTION2 = '<:ConnectionEnding:1436843084985143449>';
 const SEPARATOR = '<:valBlank:806719192191336448>';
 const FALLBACK_ICON = '<:icon_Titan:1181684178467696680>'; // Titan fallback emoji
-
-
-
-
 
 export class UpdateClanDirectory extends Task {
 	public async run() {
@@ -175,8 +171,7 @@ export class UpdateClanDirectory extends Task {
 		clans: ClanDirectoryData[],
 	): Promise<Map<string, { id: string; name: string }>> {
 		
-		const APPLICATION_ID = this.container.client.application!.id; //appID for uploading emojis
-		
+		const APPLICATION_ID = this.container.client.application!.id;
 		const rest = this.container.client.rest;
 		const emojiMap = new Map<string, { id: string; name: string }>();
 		
@@ -196,12 +191,10 @@ export class UpdateClanDirectory extends Task {
 
 		let existing: any[] = [];
 		try {
-			const response = await rest.get(Routes.applicationEmojis(APPLICATION_ID)) as any;
-			
+			const response = (await rest.get(Routes.applicationEmojis(APPLICATION_ID))) as RESTGetAPIApplicationEmojisResult;
+		
 			if (response && Array.isArray(response.items)) {
 				existing = response.items;
-			} else if (Array.isArray(response)) {
-				existing = response;
 			} else {
 				this.container.logger.warn('[ICON SYNC] Unexpected response format from applicationEmojis API', response);
 				existing = [];
@@ -211,11 +204,11 @@ export class UpdateClanDirectory extends Task {
 			this.container.logger.error('[ICON SYNC] Failed to fetch existing application emojis:', err);
 			existing = [];
 		}
+
 		for (const clan of clans) {
 			if (!clan.iconHash) continue;
 
 			const emojiName = `role_${clan.customRoleId}`;
-			// This call is now safe because 'existing' is guaranteed to be an array.
 			const existingEmoji = existing.find((e) => e.name === emojiName);
 			if (existingEmoji) {
 				emojiMap.set(clan.customRoleId, { id: existingEmoji.id, name: emojiName });
