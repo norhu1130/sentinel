@@ -34,9 +34,9 @@ const clanInviteCooldown = 60 * 60_000; // 60 seconds * 60 minutes * 24 hours = 
 const clanInviteDelayString = 'an hour';
 const cooldowns = new Collection<string, number>();
 
-// Simple cooldown map (in-memory)
-const requestCooldowns = new Map<string, number>(); // Key: requesterId-clanOwnerId, Value: timestamp when cooldown expires
-const COOLDOWN_DURATION = 15 * 60 * 1000; // 15 minutes in milliseconds
+const requestCooldowns = new Map<string, number>(); // 'requesterId' OR 'requesterId-clanOwnerId', timestamp when cooldown expires
+const GLOBAL_JOIN_COOLDOWN = 15 * 60 * 1000; // 15 minutes
+const SAME_CLAN_JOIN_COOLDOWN = 60 * 60 * 1000; // 1 hour
 
 export class ClanCommand extends Subcommand {
 	public subcommandMappings: SubcommandMappingArray = [
@@ -394,16 +394,39 @@ export class ClanCommand extends Subcommand {
 		}
 
 		// 5. Cooldown check
-		const cooldownKey = `${requester.id}-${targetClanOwnerId}`;
 		const now = Date.now();
-		const cooldownExpires = requestCooldowns.get(cooldownKey) ?? 0;
+		const globalCooldownKey = requester.id;
+		const sameClanCooldownKey = `${requester.id}-${targetClanOwnerId}`;
 
-		if (now < cooldownExpires) {
-			const cooldownTimestamp = Math.floor(cooldownExpires / 1000);
+		const globalCooldownExpires = requestCooldowns.get(globalCooldownKey) ?? 0;
+		const sameClanCooldownExpires = requestCooldowns.get(sameClanCooldownKey) ?? 0;
+
+		// Check same-clan cooldown first (it's longer)
+		if (now < sameClanCooldownExpires) {
+			const cooldownTimestamp = Math.floor(sameClanCooldownExpires / 1000);
 			await interaction.editReply({
 				embeds: [
 					createErrorEmbed(
-						`You can send another request to this clan owner ${time(cooldownTimestamp, TimestampStyles.RelativeTime)}.`,
+						`You must wait ${time(
+							cooldownTimestamp,
+							TimestampStyles.RelativeTime,
+						)} before sending another join request to this clan.`,
+					),
+				],
+			});
+			return;
+		}
+
+		// Check global cooldown
+		if (now < globalCooldownExpires) {
+			const cooldownTimestamp = Math.floor(globalCooldownExpires / 1000);
+			await interaction.editReply({
+				embeds: [
+					createErrorEmbed(
+						`You must wait ${time(
+							cooldownTimestamp,
+							TimestampStyles.RelativeTime,
+						)} before sending another join request.`,
 					),
 				],
 			});
@@ -444,12 +467,7 @@ export class ClanCommand extends Subcommand {
 			const embed = new EmbedBuilder()
 				.setColor(targetClanRole.color || 'Blurple')
 				.setTitle(`📥 Clan Join Request: ${targetClanRole.name}`)
-				.setDescription(
-					`<@${targetClanOwnerId}>, ${requester.user.tag} (${requester.toString()}) has requested to join your clan.`,
-				)
-				.setThumbnail(requester.user.displayAvatarURL())
-				.addFields({ name: 'Members', value: `${clanMembers.size}/${MAX_MEMBERS_IN_CLAN}`, inline: true })
-				.setTimestamp();
+				.setDescription(`${requester.user.tag} (${requester.toString()}) has requested to join your clan.`);
 
 			if (userMessage) {
 				embed.addFields({ name: 'Message', value: userMessage });
@@ -460,7 +478,7 @@ export class ClanCommand extends Subcommand {
 					.setCustomId(makeClanJoinRequestId('deny', requester.id, targetClanOwnerId, clan.customRoleId))
 					.setLabel('Deny')
 					.setStyle(ButtonStyle.Danger)
-					.setEmoji('❌'),
+					.setEmoji('🙅'),
 				new ButtonBuilder()
 					.setCustomId(makeClanJoinRequestId('accept', requester.id, targetClanOwnerId, clan.customRoleId))
 					.setLabel('Accept')
@@ -468,13 +486,18 @@ export class ClanCommand extends Subcommand {
 					.setEmoji('✅'),
 			);
 
-			await clanChannel.send({ embeds: [embed], components: [row] });
+			await clanChannel.send({
+				content: `<@${targetClanOwnerId}>`,
+				embeds: [embed],
+				components: [row],
+			});
 
 			this.container.logger.info(
 				`[CLAN JOIN REQ] Sent join request from ${requester.id} to clan channel ${clanChannel.id} for clan ${targetClanRole.name}`,
 			);
 
-			requestCooldowns.set(cooldownKey, now + COOLDOWN_DURATION);
+			requestCooldowns.set(globalCooldownKey, now + GLOBAL_JOIN_COOLDOWN);
+			requestCooldowns.set(sameClanCooldownKey, now + SAME_CLAN_JOIN_COOLDOWN);
 
 			await interaction.editReply({
 				embeds: [

@@ -1,8 +1,4 @@
-import type {
-	GuildTextBasedChannel,
-	Message,
-	Role,
-} from 'discord.js';
+import type { GuildTextBasedChannel, Message, Role } from 'discord.js';
 import { EmbedBuilder } from 'discord.js';
 import { get } from 'https';
 import { Routes } from 'discord-api-types/v10';
@@ -19,8 +15,9 @@ const CONNECTION2 = '<:ConnectionEnding:1436843084985143449>';
 const SEPARATOR = '<:valBlank:806719192191336448>';
 const FALLBACK_ICON = '<:icon_Titan:1181684178467696680>'; // Titan fallback emoji
 
-// Application ID for emoji uploads
-const APPLICATION_ID = "1107437965233369118";
+
+
+
 
 export class UpdateClanDirectory extends Task {
 	public async run() {
@@ -99,7 +96,7 @@ export class UpdateClanDirectory extends Task {
 				});
 			}
 
-			allClansData.sort((a, b) => a.name.localeCompare(b.name));
+			allClansData.sort((a, b) => Number(a.customRoleId) - Number(b.customRoleId));
 
 			const emojiMap = await this.syncRoleIconsAsAppEmojis(allClansData);
 			const embeds: EmbedBuilder[] = [];
@@ -177,9 +174,12 @@ export class UpdateClanDirectory extends Task {
 	private async syncRoleIconsAsAppEmojis(
 		clans: ClanDirectoryData[],
 	): Promise<Map<string, { id: string; name: string }>> {
+		
+		const APPLICATION_ID = this.container.client.application!.id; //appID for uploading emojis
+		
 		const rest = this.container.client.rest;
 		const emojiMap = new Map<string, { id: string; name: string }>();
-
+		
 		// download helper
 		const downloadBuffer = (url: string): Promise<Buffer> =>
 			new Promise((resolve, reject) => {
