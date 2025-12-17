@@ -6,9 +6,9 @@ import { loadMediaOnlyChannels } from '../lib/utils/caches/mediaOnlyCache.js';
 
 @ApplyOptions<Listener.Options>({
 	once: true,
-	event: 'ready',
+	event: 'clientReady',
 })
-export class ReadyEvent extends Listener {
+export class ClientReadyEvent extends Listener {
 	public async run() {
 		const { client } = this.container;
 		const { user, logger } = client;
