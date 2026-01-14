@@ -1,14 +1,16 @@
-import { Buffer } from 'node:buffer';
-import { get } from 'node:https';
-import { Routes, type RESTGetAPIApplicationEmojisResult } from 'discord-api-types/v10';
 import type { GuildTextBasedChannel, Message, Role } from 'discord.js';
 import { EmbedBuilder } from 'discord.js';
+import { get } from 'https';
+import { Routes, type RESTGetAPIApplicationEmojisResult } from 'discord-api-types/v10';
 import { MAX_MEMBERS_IN_CLAN } from '../lib/abilities/ClanManager.js';
 import { Task } from '../lib/schedule/tasks/Task.js';
 import { createInfoEmbed } from '../lib/utils/createEmbed.js';
 
 const header = '[CLAN DIRECTORY] ';
-const clansPerPage = 10;
+const MAX_EMBEDS_PER_MESSAGE = 10;
+const MAX_FIELDS_PER_EMBED = 25;
+const MAX_MESSAGE_CHARACTERS = 6000; // Discord limit for all embeds in one message
+const EMBED_SAFE_LIMIT = 5500; // Buffer to leave room for headers, footers, and overhead
 
 // Emojis and icons
 const CONNECTION1 = '<:ConnectionContinuing:1436843068438351944>';
@@ -54,7 +56,7 @@ export class UpdateClanDirectory extends Task {
 				.fetch(config.clanDirectoryChannelId)
 				.catch(() => null)) as GuildTextBasedChannel | null;
 
-			if (!channel?.isTextBased()) continue;
+			if (!channel || !channel.isTextBased()) continue;
 
 			let message: Message | null = null;
 			try {
@@ -68,8 +70,8 @@ export class UpdateClanDirectory extends Task {
 						where: { guildId },
 						data: { clanDirectoryMessageId: message.id },
 					});
-				} catch (error) {
-					this.container.logger.error(`${header}Failed to recreate message for ${guild.name}`, error);
+				} catch (err) {
+					this.container.logger.error(`${header}Failed to recreate message for ${guild.name}`, err);
 					continue;
 				}
 			}
@@ -98,88 +100,115 @@ export class UpdateClanDirectory extends Task {
 			const emojiMap = await this.syncRoleIconsAsAppEmojis(allClansData);
 			const embeds: EmbedBuilder[] = [];
 
-			for (let i = 0; i < allClansData.length; i += clansPerPage) {
-				const chunk = allClansData.slice(i, i + clansPerPage);
-				const embed = new EmbedBuilder().setColor(0x27272f);
+			let currentEmbed = new EmbedBuilder().setColor(0x27272f);
+			let fieldCount = 0;
 
-				// Add heading and thumbnail only to the first embed
-				if (i === 0) {
-					embed
-						.setDescription(`## ${guild.name} Clan Discovery\n${SEPARATOR}`)
-						.setThumbnail(guild.iconURL({ extension: 'png', size: 128 }) ?? null);
+			// Initialize first embed with heading and thumbnail
+			currentEmbed
+				.setDescription(`## ${guild.name} Clan Directory\n${SEPARATOR}`)
+				.setThumbnail(guild.iconURL({ extension: 'png', size: 128 }) ?? null);
+
+			for (const data of allClansData) {
+				const emoji = emojiMap.get(data.customRoleId);
+				const roleIcon = emoji ? `<:${emoji.name}:${emoji.id}>` : FALLBACK_ICON;
+				const ownerMention = data.ownerId ? `<@${data.ownerId}>` : '`Unknown Owner`';
+				const descriptionText = data.description || '*No description set*';
+
+				const clanField = {
+					name: `${roleIcon}  ${data.name}`,
+					value: [
+						`-# ${CONNECTION1} Owner: ${ownerMention}`,
+						`-# ${CONNECTION1} Members: \`${data.memberCount}\` / ${MAX_MEMBERS_IN_CLAN}`,
+						`-# ${CONNECTION2} Description: ${descriptionText}`,
+					].join('\n'),
+					inline: false,
+				};
+				const separatorField = { name: ' ', value: SEPARATOR, inline: false };
+
+				// Pre-calculate length of the new fields to prevent overflow
+				const addedLength = clanField.name.length + clanField.value.length + separatorField.name.length + separatorField.value.length;
+
+				// Create new embed if field limit or character limit is exceeded
+				if ((fieldCount + 2 > MAX_FIELDS_PER_EMBED || this.getEmbedLength(currentEmbed) + addedLength > EMBED_SAFE_LIMIT) && fieldCount > 0) {
+					embeds.push(currentEmbed);
+					currentEmbed = new EmbedBuilder().setColor(0x27272f);
+					fieldCount = 0;
 				}
 
-				for (const data of chunk) {
-					const emoji = emojiMap.get(data.customRoleId);
-					const roleIcon = emoji ? `<:${emoji.name}:${emoji.id}>` : FALLBACK_ICON;
-					const ownerMention = data.ownerId ? `<@${data.ownerId}>` : '`Unknown Owner`';
-					const descriptionText = data.description || '*No description set*';
+				currentEmbed.addFields(clanField, separatorField);
+				fieldCount += 2;
+			}
 
-					embed.addFields({
-						name: `${roleIcon}  ${data.name}`,
-						value: [
-							`-# ${CONNECTION1} Owner: ${ownerMention}`,
-							`-# ${CONNECTION1} Members: \`${data.memberCount}\` / ${MAX_MEMBERS_IN_CLAN}`,
-							`-# ${CONNECTION2} Description: ${descriptionText}`,
-						].join('\n'),
-						inline: false,
-					});
+			const footerField = {
+				name: ' ',
+				value: `-# Request to join a clan with \`/clan join\`. \n-# Want to create a clan? Check out our [**server subscriptions!**](https://discord.com/channels/679875946597056683/shop) (desktop only)`,
+				inline: false,
+			};
 
-					embed.addFields({ name: ' ', value: SEPARATOR, inline: false });
+			// Finalize the last embed with the footer
+			if (fieldCount > 0) {
+				if (this.getEmbedLength(currentEmbed) + footerField.name.length + footerField.value.length > MAX_MESSAGE_CHARACTERS) {
+					embeds.push(currentEmbed);
+					currentEmbed = new EmbedBuilder().setColor(0x27272f);
 				}
-
-				// Add footer only to the final embed
-				if (i + clansPerPage >= allClansData.length) {
-					embed.addFields({
-						name: ' ',
-						value: `-# Request to join a clan with \`/clan join\`. \nWant to create a clan? Check out our [**server subscriptions!**](https://discord.com/channels/679875946597056683/shop) (desktop only)`,
-						inline: false,
-					});
-				}
-
-				embeds.push(embed);
+				currentEmbed.addFields(footerField);
+				embeds.push(currentEmbed);
 			}
 
 			if (embeds.length === 0) {
 				embeds.push(
 					new EmbedBuilder()
 						.setColor(0x27272f)
-						.setDescription(`## ${guild.name} Clan Discovery\n${SEPARATOR}`)
-						.setThumbnail(guild.iconURL({ extension: 'png', size: 128 }) ?? null),
+						.setDescription(`## ${guild.name} Clan Directory\n${SEPARATOR}`)
+						.setThumbnail(guild.iconURL({ extension: 'png', size: 128 }) ?? null)
+						.addFields(footerField),
 				);
 			}
 
 			try {
-				const MAX_EMBEDS_PER_MESSAGE = 10;
+				// Chunk embeds by count (10) AND total character count (6000)
+				const chunks: EmbedBuilder[][] = [];
+				let currentChunk: EmbedBuilder[] = [];
+				let currentChunkLength = 0;
 
-				if (embeds.length <= MAX_EMBEDS_PER_MESSAGE) {
-					await message.edit({ embeds, components: [] });
-				} else {
-					const chunks: EmbedBuilder[][] = [];
-					for (let i = 0; i < embeds.length; i += MAX_EMBEDS_PER_MESSAGE) {
-						chunks.push(embeds.slice(i, i + MAX_EMBEDS_PER_MESSAGE));
+				for (const embed of embeds) {
+					const embedLength = this.getEmbedLength(embed);
+					if (currentChunk.length >= MAX_EMBEDS_PER_MESSAGE || currentChunkLength + embedLength > MAX_MESSAGE_CHARACTERS) {
+						chunks.push(currentChunk);
+						currentChunk = [embed];
+						currentChunkLength = embedLength;
+					} else {
+						currentChunk.push(embed);
+						currentChunkLength += embedLength;
 					}
 				}
 				if (currentChunk.length > 0) chunks.push(currentChunk);
 
 				await message.edit({ embeds: chunks[0], components: [] });
 
-					const existingMessages = await channel.messages.fetch({ limit: 20 });
-					const oldDirectoryMessages = existingMessages.filter(
-						(m) => m.author.id === this.container.client.user?.id && m.id !== message.id,
-					);
+				const existingMessages = await channel.messages.fetch({ limit: 100 });
+				const oldDirectoryMessages = existingMessages.filter(
+					(m) => m.author.id === this.container.client.user?.id && m.id !== message.id,
+				);
 
-					for (const old of oldDirectoryMessages.values()) {
-						await old.delete().catch(() => null);
+				for (const old of oldDirectoryMessages.values()) {
+					try {
+						await old.delete();
+					} catch (err) {
+						this.container.logger.warn(`${header}Failed to delete old directory message`, err);
 					}
+				}
 
-					for (let i = 1; i < chunks.length; i++) {
+				for (let i = 1; i < chunks.length; i++) {
+					try {
 						await channel.send({ embeds: chunks[i] });
+					} catch (err) {
+						this.container.logger.error(`${header}Failed to send directory chunk ${i}`, err);
 					}
 				}
 
 				this.container.logger.info(
-					`${header}Updated clan directory for ${guild.name} (${embeds.length} embeds).`,
+					`${header}Updated clan directory for ${guild.name} (${embeds.length} embeds across ${chunks.length} messages).`,
 				);
 			} catch (error) {
 				this.container.logger.error(
@@ -212,14 +241,13 @@ export class UpdateClanDirectory extends Task {
 		const rest = this.container.client.rest;
 		const emojiMap = new Map<string, { id: string; name: string }>();
 
-		const downloadBuffer = async (url: string): Promise<Buffer> =>
+		const downloadBuffer = (url: string): Promise<Buffer> =>
 			new Promise((resolve, reject) => {
 				get(url, (res) => {
 					if (res.statusCode !== 200) {
 						reject(new Error(`HTTP ${res.statusCode}`));
 						return;
 					}
-
 					const data: Buffer[] = [];
 					res.on('data', (chunk: Buffer) => data.push(chunk));
 					res.on('end', () => resolve(Buffer.concat(data)));
@@ -241,34 +269,65 @@ export class UpdateClanDirectory extends Task {
 				);
 				existing = [];
 			}
-		} catch (error) {
-			this.container.logger.error('[ICON SYNC] Failed to fetch existing application emojis:', error);
+		} catch (err) {
+			this.container.logger.error('[ICON SYNC] Failed to fetch existing application emojis:', err);
 			existing = [];
 		}
+
+		const storedIconHashes = await this.container.prisma.clanEmojiCache.findMany();
+		const storedMap = new Map(storedIconHashes.map((entry) => [entry.roleId, entry.iconHash]));
 
 		for (const clan of clans) {
 			const emojiName = `role_${clan.customRoleId}`;
 			const existingEmoji = existing.find((e) => e.name === emojiName);
-			if (existingEmoji) {
+			const storedIconHash = storedMap.get(clan.customRoleId);
+			const iconChanged = storedIconHash !== clan.iconHash;
+
+			if (!clan.iconHash) {
+				emojiMap.set(clan.customRoleId, existingEmoji ? { id: existingEmoji.id, name: emojiName } : null!);
+				continue;
+			}
+
+			if (existingEmoji && !iconChanged) {
 				emojiMap.set(clan.customRoleId, { id: existingEmoji.id, name: emojiName });
 				continue;
 			}
 
-			// Icon changed or emoji doesn't exist - download and upload
 			const iconURL = `https://cdn.discordapp.com/role-icons/${clan.customRoleId}/${clan.iconHash}.webp`;
 
 			try {
 				const buffer = await downloadBuffer(iconURL);
 				const base64 = `data:image/png;base64,${buffer.toString('base64')}`;
 
-				const created = (await rest.post(Routes.applicationEmojis(APPLICATION_ID), {
+				let createdEmoji: { id: string; name: string };
+
+				if (existingEmoji && iconChanged) {
+					try {
+						await rest.delete(Routes.applicationEmoji(APPLICATION_ID, existingEmoji.id));
+						this.container.logger.info(`[ICON SYNC] Deleted old emoji for clan ${clan.name}`);
+					} catch (err) {
+						this.container.logger.warn(`[ICON SYNC] Failed to delete old emoji for clan ${clan.name}:`, err);
+					}
+				}
+
+				createdEmoji = (await rest.post(Routes.applicationEmojis(APPLICATION_ID), {
 					body: { name: emojiName, image: base64 },
 				})) as { id: string; name: string };
 
-				this.container.logger.info(`[ICON SYNC] Uploaded application emoji for ${clan.name}`);
-				emojiMap.set(clan.customRoleId, created);
+				this.container.logger.info(`[ICON SYNC] ${iconChanged ? 'Updated' : 'Uploaded'} application emoji for ${clan.name}`);
+
+				await this.container.prisma.clanEmojiCache.upsert({
+					where: { roleId: clan.customRoleId },
+					create: { roleId: clan.customRoleId, iconHash: clan.iconHash },
+					update: { iconHash: clan.iconHash },
+				});
+
+				emojiMap.set(clan.customRoleId, createdEmoji);
 			} catch (err) {
-				this.container.logger.error(`[ICON SYNC] Failed to upload app emoji for ${clan.name}:`, err);
+				this.container.logger.error(`[ICON SYNC] Failed to sync emoji for clan ${clan.name}:`, err);
+				if (existingEmoji) {
+					emojiMap.set(clan.customRoleId, { id: existingEmoji.id, name: emojiName });
+				}
 			}
 		}
 
@@ -277,10 +336,10 @@ export class UpdateClanDirectory extends Task {
 }
 
 interface ClanDirectoryData {
-	customRoleId: string;
-	description: string;
-	iconHash?: string | null;
-	memberCount: number;
 	name: string;
+	description: string;
+	memberCount: number;
 	ownerId?: string | null;
+	customRoleId: string;
+	iconHash?: string | null;
 }
