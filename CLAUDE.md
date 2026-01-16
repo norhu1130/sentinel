@@ -365,6 +365,12 @@ throw new Error('Unexpected database error');
 -   [Prisma Documentation](https://www.prisma.io/docs/)
 -   [Discord API Types](https://discord-api-types.dev/)
 
+## Local Documentation
+
+Additional reference docs are in `.claude/*.local.md` (gitignored). Currently available:
+
+-   `components-v2.local.md` - Discord Components V2 API reference and patterns
+
 ## Getting Help
 
 For questions or issues:

@@ -727,24 +727,32 @@ export class ClanManager {
 	}
 
 	public async removeMember(member: GuildMember): Promise<ClanMemberRemoveStatus> {
+		await this.log(`Trying to remove member ${member.user.username} (${member.id})`);
+
 		const clan = await this.getClan();
 
 		if (!clan) {
+			await this.log(`Could not remove member ${member.user.username} (${member.id}): no clan found`);
 			return ClanMemberRemoveStatus.ClanNotFound;
 		}
 
-		const premiumMember = await this.getPremiumMember();
+		const customRoleId = await this.getCustomRoleId();
 		const clanMembers = await this.getDiscordClanMembers();
 		const clanChannel = await this.getClanChannel();
 
-		// Ensure member is fully hydrated before accessing roles
-		const fullMember = await ensureFullMember(member);
+		await ensureFullMember(member);
 
-		if (premiumMember?.customRoleId && fullMember.roles.cache.has(premiumMember.customRoleId)) {
-			await fullMember.roles.remove(premiumMember.customRoleId);
+		if (customRoleId && member.roles.cache.has(customRoleId)) {
+			await this.log(`Removing member ${member.user.username} (${member.id}): removing custom role first`);
+			await member.roles.remove(customRoleId);
+			await this.log(`Removing member ${member.user.username} (${member.id}): removed custom role`);
 		}
 
+		await this.log(`Removing member ${member.user.username} (${member.id}): removing permission overwrites`);
 		await clanChannel?.permissionOverwrites.delete(member.id);
+		await this.log(`Removing member ${member.user.username} (${member.id}): removed permission overwrites`);
+
+		await this.log(`Removing member ${member.user.username} (${member.id}): deleting clan member entry`);
 		await container.prisma.clanMember.delete({
 			where: {
 				clanGuildId_clanCustomRoleId_userId: {
@@ -754,6 +762,7 @@ export class ClanManager {
 				},
 			},
 		});
+		await this.log(`Removing member ${member.user.username} (${member.id}): deleted clan member entry`);
 
 		this.invalidateCache('clanMembers');
 

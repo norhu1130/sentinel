@@ -41,3 +41,6 @@ wiki/
 
 data/
 .env
+
+# Local Claude docs (not committed)
+.claude/*.local*
