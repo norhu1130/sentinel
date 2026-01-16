@@ -9,7 +9,7 @@
 		"format": "prettier --write . && cross-env TIMING=1 eslint --fix --format=pretty src",
 		"build": "tsc",
 		"cleanbuild": "rimraf dist && tsc",
-		"watch": "tsc -w",
+		"watch": "npx tsc-watch --onSuccess \"node .\"",
 		"dev": "npm run start"
 	},
 	"private": true,

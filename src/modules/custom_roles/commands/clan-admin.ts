@@ -36,6 +36,11 @@ export class ClanAdminCommand extends Subcommand {
 		},
 		{
 			type: 'method',
+			name: 'list',
+			chatInputRun: 'listSubcommand',
+		},
+		{
+			type: 'method',
 			name: 'remove-member',
 			chatInputRun: 'removeMemberSubcommand',
 		},
@@ -59,14 +64,42 @@ export class ClanAdminCommand extends Subcommand {
 	public async infoSubcommand(interaction: Subcommand.ChatInputCommandInteraction<'cached'>) {
 		await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
-		const clanRole = interaction.options.getRole('clan', true);
-		const clanManager = new ClanManager(clanRole.id, interaction.guildId);
+		const clanRole = interaction.options.getRole('clan');
+		const user = interaction.options.getUser('user');
+
+		if (!clanRole && !user) {
+			await this.replyWithComponents(interaction, [
+				this.errorMessage('You must provide either a clan role or a user.'),
+			]);
+			return;
+		}
+
+		let clanManager: ClanManager;
+		let premiumMember: { userId: string; customRoleId: string | null } | null = null;
+
+		if (user) {
+			// Look up the clan by user (owner)
+			premiumMember = await this.container.prisma.premiumMember.findFirst({
+				where: { guildId: interaction.guildId, userId: user.id },
+			});
+
+			if (!premiumMember?.customRoleId) {
+				await this.replyWithComponents(interaction, [
+					this.errorMessage('This user does not own a clan.'),
+				]);
+				return;
+			}
+
+			clanManager = new ClanManager(premiumMember.customRoleId, interaction.guildId);
+		} else {
+			clanManager = new ClanManager(clanRole!.id, interaction.guildId);
+		}
 
 		const clan = await clanManager.getClan();
 
 		if (!clan) {
 			await this.replyWithComponents(interaction, [
-				this.errorMessage('This role does not have an associated clan.'),
+				this.errorMessage(user ? 'This user does not own a clan.' : 'This role does not have an associated clan.'),
 			]);
 			return;
 		}
@@ -75,10 +108,12 @@ export class ClanAdminCommand extends Subcommand {
 		const clanChannel = await clanManager.getClanChannel();
 		const clanMembers = await clanManager.getClanMembers();
 
-		// Find owner (the premium member who owns the custom role)
-		const premiumMember = await this.container.prisma.premiumMember.findFirst({
-			where: { guildId: interaction.guildId, customRoleId: clanRole.id },
-		});
+		// Find owner (the premium member who owns the custom role) if not already fetched
+		if (!premiumMember) {
+			premiumMember = await this.container.prisma.premiumMember.findFirst({
+				where: { guildId: interaction.guildId, customRoleId: clan.customRoleId },
+			});
+		}
 
 		const ownerMention = premiumMember ? `<@${premiumMember.userId}>` : 'Unknown (orphaned)';
 		const channelMention = clanChannel ? `<#${clanChannel.id}>` : 'Not found';
@@ -118,6 +153,60 @@ export class ClanAdminCommand extends Subcommand {
 		}
 
 		await this.replyWithComponents(interaction, [container], { parse: [] });
+	}
+
+	public async listSubcommand(interaction: Subcommand.ChatInputCommandInteraction<'cached'>) {
+		await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+		const user = interaction.options.getUser('user', true);
+
+		// Find all clans this user is a member of
+		const clanMemberships = await this.container.prisma.clanMember.findMany({
+			where: { clanGuildId: interaction.guildId, userId: user.id },
+			include: { clan: true },
+		});
+
+		// Check if user owns a clan
+		const ownedClan = await this.container.prisma.premiumMember.findFirst({
+			where: { guildId: interaction.guildId, userId: user.id, customRoleId: { not: null } },
+		});
+
+		if (clanMemberships.length === 0) {
+			await this.replyWithComponents(interaction, [
+				this.infoMessage(`**${user.username}** is not a member of any clans.`),
+			]);
+			return;
+		}
+
+		// Build the list
+		const clanLines: string[] = [];
+
+		for (const membership of clanMemberships) {
+			const role = await interaction.guild.roles.fetch(membership.clanCustomRoleId).catch(() => null);
+			const roleName = role?.name ?? 'Unknown';
+			const isOwner = ownedClan?.customRoleId === membership.clanCustomRoleId;
+
+			clanLines.push(`- **${roleName}**${isOwner ? ' 👑' : ''}`);
+		}
+
+		const container = new ContainerBuilder()
+			.setAccentColor(Colors.Info)
+			.addTextDisplayComponents(
+				new TextDisplayBuilder().setContent(`## Clans for ${user.username}`),
+			)
+			.addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small))
+			.addTextDisplayComponents(
+				new TextDisplayBuilder().setContent(clanLines.join('\n')),
+			);
+
+		if (ownedClan?.customRoleId) {
+			container.addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small));
+			container.addTextDisplayComponents(
+				new TextDisplayBuilder().setContent('👑 = Clan owner'),
+			);
+		}
+
+		await this.replyWithComponents(interaction, [container]);
 	}
 
 	public async removeMemberSubcommand(interaction: Subcommand.ChatInputCommandInteraction<'cached'>) {
@@ -382,7 +471,18 @@ export class ClanAdminCommand extends Subcommand {
 						.setName('info')
 						.setDescription('Get detailed information about a clan')
 						.addRoleOption((option) =>
-							option.setName('clan').setDescription('The clan role to get info about').setRequired(true),
+							option.setName('clan').setDescription('The clan role to get info about'),
+						)
+						.addUserOption((option) =>
+							option.setName('user').setDescription('The user who owns the clan'),
+						),
+				)
+				.addSubcommand((subcommand) =>
+					subcommand
+						.setName('list')
+						.setDescription('List clans a user is a member of')
+						.addUserOption((option) =>
+							option.setName('user').setDescription('The user to check').setRequired(true),
 						),
 				)
 				.addSubcommand((subcommand) =>
