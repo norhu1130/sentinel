@@ -216,7 +216,7 @@ model PremiumGuildRoleConfig {
   clanDirectoryChannelId String? 
   
   /// The message ID of the clan directory message
-  clanDirectoryMessageId String? 
+  clanDirectoryMessageIds String[] @default([])
 
   /// The roles whose colors should be checked for custom premium roles so that the color is not too similar
   staffRoles String[]
