@@ -951,7 +951,7 @@ export class ConfigPremiumCommand extends Subcommand {
 		// 4. Update or Create Config in Database (Upsert)
 		const dataToSave = {
 			clanDirectoryChannelId: channel.id,
-			clanDirectoryMessageId: directoryMessage.id, // Save the new message ID
+			clanDirectoryMessageIds: [directoryMessage.id], // Save the new message ID
 		};
 
 		await this.container.prisma.premiumGuildRoleConfig.upsert({
