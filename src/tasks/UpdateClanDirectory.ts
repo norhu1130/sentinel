@@ -89,11 +89,12 @@ export class UpdateClanDirectory extends Task {
 				const emoji = emojiMap.get(data.customRoleId);
 				const roleIcon = emoji ? `<:${emoji.name}:${emoji.id}>` : FALLBACK_ICON;
 				const ownerMention = data.ownerId ? `<@${data.ownerId}>` : '`Unknown Owner`';
-                const descriptionText = data.description || '*No description set*';
+				const descriptionText = data.description || '*No description set*';
 
 				const clanField = {
-					name: `${roleIcon}  ${data.name}`,
+					name: ` `,
 					value: [
+						`${roleIcon} <@&${data.customRoleId}>`,
 						`-# ${CONNECTION1} Owner: ${ownerMention}`,
 						`-# ${CONNECTION1} Members: \`${data.memberCount}\` / ${MAX_MEMBERS_IN_CLAN}`,
 						`-# ${CONNECTION2} Description: ${descriptionText}`,
@@ -123,7 +124,7 @@ export class UpdateClanDirectory extends Task {
 
 			const footerField = {
 				name: ' ',
-				value: `-# Request to join a clan with \`/clan join\`. \n-# Want to create a clan? Check out our [**server subscriptions!**](https://discord.com/channels/679875946597056683/shop)(desktop only)`,
+				value: `-# Request to join a clan with \`/clan join\`. \n-# Want to create a clan? Check out our [**server subscriptions! **](https://discord.com/channels/679875946597056683/shop)(desktop only)`,
 				inline: false,
 			};
 
