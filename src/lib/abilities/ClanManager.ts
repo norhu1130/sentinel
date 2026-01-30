@@ -1470,12 +1470,13 @@ export class ClanManager {
 		return this.doLog(log, 'error');
 	}
 
-	private async getSentryTags(): Promise<Record<string, string>> {
+	private getSentryTags(): Record<string, string> {
+		// Use cached values directly to avoid circular calls (getters add breadcrumbs which call this)
 		return {
 			userId: this.getClanOwnerId() ?? 'unknown',
 			guildId: this.guildId,
-			customRoleId: (await this.getCustomRoleId()) ?? 'unknown',
-			clanChannelId: (await this.getClanChannel())?.id ?? 'unknown',
+			customRoleId: this.customRoleId ?? this.userOrCustomRoleId ?? 'unknown',
+			clanChannelId: this.clanChannel?.id ?? 'unknown',
 		};
 	}
 
@@ -1484,7 +1485,7 @@ export class ClanManager {
 		data?: Record<string, unknown>,
 		level: Sentry.SeverityLevel = 'info',
 	): Promise<void> {
-		const tags = await this.getSentryTags();
+		const tags = this.getSentryTags();
 		Sentry.addBreadcrumb({
 			category: 'clan',
 			message: `${await this.getLogPrefix()}${message}`,
@@ -1498,7 +1499,7 @@ export class ClanManager {
 		context?: string,
 		extra?: Record<string, unknown>,
 	): Promise<void> {
-		const tags = await this.getSentryTags();
+		const tags = this.getSentryTags();
 		const errorMessage = error instanceof Error ? error : new Error(error);
 
 		Sentry.withScope((scope) => {
@@ -1517,7 +1518,7 @@ export class ClanManager {
 	}
 
 	private async captureWarning(message: string, extra?: Record<string, unknown>): Promise<void> {
-		const tags = await this.getSentryTags();
+		const tags = this.getSentryTags();
 		const logPrefix = await this.getLogPrefix();
 
 		Sentry.withScope((scope) => {
