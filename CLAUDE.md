@@ -359,6 +359,7 @@ throw new Error('Unexpected database error');
 -   **Caching**: Be aware of Discord cache limitations, refetch data when needed
 -   **Git commits**: Do NOT add Co-Authored-By lines to commits
 -   **"Take note"**: When told to "take note", add it to this file (CLAUDE.md), don't just acknowledge
+-   **Pre-existing errors**: When running lint/format and encountering pre-existing errors in files not modified by the current task, fix them too
 
 ## Resources
 

@@ -1,7 +1,8 @@
+import { Buffer } from 'node:buffer';
+import { get } from 'node:https';
+import { Routes, type RESTGetAPIApplicationEmojisResult } from 'discord-api-types/v10';
 import type { GuildTextBasedChannel, Message, Role } from 'discord.js';
 import { EmbedBuilder } from 'discord.js';
-import { get } from 'https';
-import { Routes, type RESTGetAPIApplicationEmojisResult } from 'discord-api-types/v10';
 import { MAX_MEMBERS_IN_CLAN } from '../lib/abilities/ClanManager.js';
 import { Task } from '../lib/schedule/tasks/Task.js';
 
@@ -9,8 +10,8 @@ const header = '[CLAN DIRECTORY] ';
 
 const MAX_EMBEDS_PER_MESSAGE = 10;
 const MAX_FIELDS_PER_EMBED = 25;
-const MAX_MESSAGE_CHARACTERS = 6000;
-const EMBED_SAFE_LIMIT = 5500;
+const MAX_MESSAGE_CHARACTERS = 6_000;
+const EMBED_SAFE_LIMIT = 5_500;
 
 const CONNECTION1 = '<:ConnectionContinuing:1436843068438351944>';
 const CONNECTION2 = '<:ConnectionEnding:1436843084985143449>';
@@ -51,7 +52,7 @@ export class UpdateClanDirectory extends Task {
 			const channel = (await guild.channels
 				.fetch(config.clanDirectoryChannelId)
 				.catch(() => null)) as GuildTextBasedChannel | null;
-			if (!channel || !channel.isTextBased()) continue;
+			if (!channel?.isTextBased()) continue;
 
 			// 1. Prepare Clan Data
 			const allClansData: ClanDirectoryData[] = [];
@@ -135,6 +136,7 @@ export class UpdateClanDirectory extends Task {
 				embeds.push(currentEmbed);
 				currentEmbed = new EmbedBuilder().setColor(0x27272f);
 			}
+
 			currentEmbed.addFields(footerField);
 			embeds.push(currentEmbed);
 
@@ -154,6 +156,7 @@ export class UpdateClanDirectory extends Task {
 					currentChunkLen += len;
 				}
 			}
+
 			if (currentChunk.length > 0) chunks.push(currentChunk);
 
 			// 4. Update Messages (Edit if exists, Send if new)
@@ -161,17 +164,17 @@ export class UpdateClanDirectory extends Task {
 			const newMessageIds: string[] = [];
 
 			try {
-				for (let i = 0; i < chunks.length; i++) {
+				for (const [idx, chunk] of chunks.entries()) {
 					let message: Message | null = null;
-					if (oldMessageIds[i]) {
-						message = await channel.messages.fetch(oldMessageIds[i]).catch(() => null);
+					if (oldMessageIds[idx]) {
+						message = await channel.messages.fetch(oldMessageIds[idx]).catch(() => null);
 					}
 
 					if (message) {
-						await message.edit({ embeds: chunks[i], components: [] });
+						await message.edit({ embeds: chunk, components: [] });
 						newMessageIds.push(message.id);
 					} else {
-						const sent = await channel.send({ embeds: chunks[i] });
+						const sent = await channel.send({ embeds: chunk });
 						newMessageIds.push(sent.id);
 					}
 				}
@@ -210,6 +213,7 @@ export class UpdateClanDirectory extends Task {
 			length += field.name.length;
 			length += field.value.length;
 		}
+
 		return length;
 	}
 
@@ -220,10 +224,14 @@ export class UpdateClanDirectory extends Task {
 		const rest = this.container.client.rest;
 		const emojiMap = new Map<string, { id: string; name: string }>();
 
-		const downloadBuffer = (url: string): Promise<Buffer> =>
+		const downloadBuffer = async (url: string): Promise<Buffer> =>
 			new Promise((resolve, reject) => {
 				get(url, (res) => {
-					if (res.statusCode !== 200) return reject(new Error(`HTTP ${res.statusCode}`));
+					if (res.statusCode !== 200) {
+						reject(new Error(`HTTP ${res.statusCode}`));
+						return;
+					}
+
 					const data: Buffer[] = [];
 					res.on('data', (chunk: Buffer) => data.push(chunk));
 					res.on('end', () => resolve(Buffer.concat(data)));
@@ -236,8 +244,8 @@ export class UpdateClanDirectory extends Task {
 				Routes.applicationEmojis(APPLICATION_ID),
 			)) as RESTGetAPIApplicationEmojisResult;
 			existing = response?.items || [];
-		} catch (err) {
-			this.container.logger.error('[ICON SYNC] Failed to fetch existing application emojis:', err);
+		} catch (error) {
+			this.container.logger.error('[ICON SYNC] Failed to fetch existing application emojis:', error);
 		}
 
 		const storedIconHashes = await this.container.prisma.clanEmojiCache.findMany();
@@ -245,7 +253,7 @@ export class UpdateClanDirectory extends Task {
 
 		for (const clan of clans) {
 			const emojiName = `role_${clan.customRoleId}`;
-			const existingEmoji = existing.find((e) => e.name === emojiName);
+			const existingEmoji = existing.find((em) => em.name === emojiName);
 			const storedIconHash = storedMap.get(clan.customRoleId);
 			const iconChanged = storedIconHash !== clan.iconHash;
 
@@ -280,20 +288,21 @@ export class UpdateClanDirectory extends Task {
 				});
 
 				emojiMap.set(clan.customRoleId, createdEmoji);
-			} catch (err) {
-				this.container.logger.error(`[ICON SYNC] Failed to sync emoji for clan ${clan.name}:`, err);
+			} catch (error) {
+				this.container.logger.error(`[ICON SYNC] Failed to sync emoji for clan ${clan.name}:`, error);
 				if (existingEmoji) emojiMap.set(clan.customRoleId, { id: existingEmoji.id, name: emojiName });
 			}
 		}
+
 		return emojiMap;
 	}
 }
 
 interface ClanDirectoryData {
-	name: string;
-	description: string;
-	memberCount: number;
-	ownerId?: string | null;
 	customRoleId: string;
+	description: string;
 	iconHash?: string | null;
+	memberCount: number;
+	name: string;
+	ownerId?: string | null;
 }

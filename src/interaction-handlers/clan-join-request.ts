@@ -1,5 +1,6 @@
 import { ApplyOptions } from '@sapphire/decorators';
 import { InteractionHandler, InteractionHandlerTypes } from '@sapphire/framework';
+import * as Sentry from '@sentry/node';
 import { ButtonInteraction, EmbedBuilder, GuildMember, MessageFlags } from 'discord.js';
 import { ClanManager, ClanMemberAddStatus, MAX_MEMBERS_IN_CLAN } from '../lib/abilities/ClanManager.js';
 import { createErrorEmbed, createInfoEmbed } from '../lib/utils/createEmbed.js';
@@ -76,6 +77,18 @@ export class ClanJoinRequestHandler extends InteractionHandler {
 		data: InteractionHandler.ParseResult<this>,
 	): Promise<void> {
 		await interaction.deferUpdate();
+
+		const { action, requesterId, clanRoleId } = data;
+		const logPrefix = `[CLAN JOIN REQ @${requesterId}]`;
+		const tags = { requesterId, ownerId: interaction.user.id, guildId: interaction.guildId, clanRoleId, action };
+
+		Sentry.addBreadcrumb({
+			category: 'clan',
+			message: `${logPrefix} Processing join request`,
+			level: 'info',
+			data: tags,
+		});
+
 		this.container.logger.info(
 			`[CLAN JOIN REQ HANDLER] Running handler for interaction ${interaction.id}. Guild: ${interaction.guildId}. Data: ${JSON.stringify(data)}`,
 		);
@@ -224,10 +237,25 @@ export class ClanJoinRequestHandler extends InteractionHandler {
 			this.container.logger.info(
 				`[CLAN JOIN REQ HANDLER] Calling clanManager.inviteMember for requester ${requesterId}.`,
 			);
+
+			Sentry.addBreadcrumb({
+				category: 'clan',
+				message: `${logPrefix} Calling inviteMember`,
+				level: 'info',
+				data: tags,
+			});
+
 			const addStatus = await clanManager.inviteMember(requester.id, true);
 			this.container.logger.info(
 				`[CLAN JOIN REQ HANDLER] clanManager.inviteMember returned status: ${ClanMemberAddStatus[addStatus]} (${addStatus})`,
 			);
+
+			Sentry.addBreadcrumb({
+				category: 'clan',
+				message: `${logPrefix} inviteMember completed`,
+				level: 'info',
+				data: { ...tags, addStatus, addStatusName: ClanMemberAddStatus[addStatus] },
+			});
 
 			if (addStatus === ClanMemberAddStatus.Added) {
 				await updateOriginalMessage('Accepted');
@@ -254,6 +282,23 @@ export class ClanJoinRequestHandler extends InteractionHandler {
 					}
 				}
 			} else {
+				Sentry.addBreadcrumb({
+					category: 'clan',
+					message: `${logPrefix} Join request failed: inviteMember returned error status`,
+					level: 'warning',
+					data: { ...tags, addStatus, addStatusName: ClanMemberAddStatus[addStatus] },
+				});
+				Sentry.withScope((scope) => {
+					scope.setTags(tags);
+					scope.setTag('operation', 'clanJoinRequest');
+					scope.setExtra('addStatus', addStatus);
+					scope.setExtra('addStatusName', ClanMemberAddStatus[addStatus]);
+					Sentry.captureMessage(
+						`${logPrefix} Join request failed with status: ${ClanMemberAddStatus[addStatus]}`,
+						'warning',
+					);
+				});
+
 				await updateOriginalMessage('Error');
 				await interaction.followUp({
 					embeds: [
@@ -267,6 +312,19 @@ export class ClanJoinRequestHandler extends InteractionHandler {
 				`[CLAN JOIN REQ HANDLER] UNEXPECTED ERROR during run for interaction ${interaction.id}:`,
 				error,
 			);
+
+			Sentry.addBreadcrumb({
+				category: 'clan',
+				message: `${logPrefix} Unexpected error during join request processing`,
+				level: 'error',
+				data: { ...tags, error: String(error) },
+			});
+			Sentry.withScope((scope) => {
+				scope.setTags(tags);
+				scope.setTag('operation', 'clanJoinRequest');
+				Sentry.captureException(error);
+			});
+
 			try {
 				await interaction.followUp({
 					embeds: [

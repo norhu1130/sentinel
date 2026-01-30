@@ -1,6 +1,7 @@
 import type { Clan, ClanMember, PremiumMember } from '@prisma/client';
 import { container, type ILogger } from '@sapphire/framework';
 import { Duration } from '@sapphire/time-utilities';
+import * as Sentry from '@sentry/node';
 import { ChannelType } from 'discord-api-types/v10';
 import type { CategoryChannel, Guild, GuildMember, NonThreadGuildBasedChannel, Role, TextChannel } from 'discord.js';
 import { Collection } from 'discord.js';
@@ -275,15 +276,35 @@ export class ClanManager {
 
 	public async getClan(): Promise<Clan | null | undefined> {
 		if (this.clan === undefined) {
+			await this.addBreadcrumb('getClan: retrieving custom role ID...');
 			const customRoleId = await this.getCustomRoleId();
 
 			if (!customRoleId) {
+				await this.addBreadcrumb('getClan: no custom role ID found', undefined, 'warning');
 				return;
 			}
 
-			this.clan = await container.prisma.clan.findFirst({
-				where: { guildId: this.guildId, customRoleId },
-			});
+			try {
+				await this.addBreadcrumb('getClan: custom role id retrieved, fetching clan from database', {
+					found: Boolean(this.clan),
+					customRoleId,
+				});
+				this.clan = await container.prisma.clan.findFirst({
+					where: { guildId: this.guildId, customRoleId },
+				});
+				await this.addBreadcrumb('getClan: database query completed', {
+					found: Boolean(this.clan),
+					customRoleId,
+				});
+			} catch (error) {
+				await this.addBreadcrumb(
+					'getClan: database query failed',
+					{ error: String(error), customRoleId },
+					'error',
+				);
+				void this.captureError(error as Error, 'getClan: database query failed');
+				return null;
+			}
 		}
 
 		return this.clan;
@@ -303,15 +324,30 @@ export class ClanManager {
 
 	public async getClanChannel(): Promise<TextChannel | null | undefined> {
 		if (this.clanChannel === undefined) {
+			await this.addBreadcrumb('Fetching clan channel');
 			const clan = await this.getClan();
 
 			if (!clan) {
+				await this.addBreadcrumb('getClanChannel: no clan found', undefined, 'warning');
 				return;
 			}
 
-			const channel = await this.guild.channels.fetch(clan.channelId).catch(() => {});
+			await this.addBreadcrumb('getClanChannel: fetching Discord channel', { channelId: clan.channelId });
+			const channel = await this.guild.channels.fetch(clan.channelId).catch(async (error) => {
+				await this.addBreadcrumb(
+					'getClanChannel: failed to fetch Discord channel',
+					{ channelId: clan.channelId, error: String(error) },
+					'error',
+				);
+				void this.captureWarning(`Failed to fetch clan channel ${clan.channelId}`, { error: String(error) });
+				return null;
+			});
 
 			this.clanChannel = channel as TextChannel | null;
+			await this.addBreadcrumb('getClanChannel: completed', {
+				found: Boolean(this.clanChannel),
+				channelId: clan.channelId,
+			});
 		}
 
 		return this.clanChannel;
@@ -319,13 +355,30 @@ export class ClanManager {
 
 	public async getCustomRole(): Promise<Role | null | undefined> {
 		if (this.customRole === undefined) {
+			await this.addBreadcrumb('Fetching custom role');
 			const customRoleId = await this.getCustomRoleId();
 
 			if (!customRoleId) {
+				await this.addBreadcrumb('getCustomRole: no custom role ID found', undefined, 'warning');
 				return;
 			}
 
-			this.customRole = (await this.guild.roles.fetch(customRoleId).catch(() => {})) ?? null;
+			await this.addBreadcrumb('getCustomRole: fetching Discord role', { roleId: customRoleId });
+			this.customRole =
+				(await this.guild.roles.fetch(customRoleId).catch(async (error) => {
+					await this.addBreadcrumb(
+						'getCustomRole: failed to fetch Discord role',
+						{ roleId: customRoleId, error: String(error) },
+						'error',
+					);
+					void this.captureWarning(`Failed to fetch custom role ${customRoleId}`, { error: String(error) });
+					return null;
+				})) ?? null;
+
+			await this.addBreadcrumb('getCustomRole: completed', {
+				found: Boolean(this.customRole),
+				roleId: customRoleId,
+			});
 		}
 
 		return this.customRole;
@@ -333,26 +386,36 @@ export class ClanManager {
 
 	public async getClanMembers(): Promise<Collection<string, ClanMember>> {
 		if (this.clanMembers === undefined) {
+			await this.addBreadcrumb('Fetching clan members from database');
 			const collection = new Collection<string, ClanMember>();
 			const clan = await this.getClan();
 
 			if (!clan) {
+				await this.addBreadcrumb('getClanMembers: no clan found', undefined, 'warning');
 				return collection;
 			}
 
-			const clanMembers = await container.prisma.clanMember.findMany({
-				where: { clanGuildId: clan.guildId, clanCustomRoleId: clan.customRoleId },
-			});
+			try {
+				const clanMembers = await container.prisma.clanMember.findMany({
+					where: { clanGuildId: clan.guildId, clanCustomRoleId: clan.customRoleId },
+				});
 
-			if (!clanMembers) {
+				if (!clanMembers) {
+					await this.addBreadcrumb('getClanMembers: no members found in database', undefined, 'info');
+					return collection;
+				}
+
+				for await (const clanMember of clanMembers) {
+					collection.set(clanMember.userId, clanMember);
+				}
+
+				this.clanMembers = collection;
+				await this.addBreadcrumb('getClanMembers: completed', { memberCount: collection.size });
+			} catch (error) {
+				await this.addBreadcrumb('getClanMembers: database query failed', { error: String(error) }, 'error');
+				void this.captureError(error as Error, 'getClanMembers: database query failed');
 				return collection;
 			}
-
-			for await (const clanMember of clanMembers) {
-				collection.set(clanMember.userId, clanMember);
-			}
-
-			this.clanMembers = collection;
 		}
 
 		return this.clanMembers ?? new Collection<string, ClanMember>();
@@ -360,15 +423,17 @@ export class ClanManager {
 
 	public async getDiscordClanMembers(): Promise<Collection<string, GuildMember>> {
 		if (this.discordClanMembers === undefined) {
+			await this.addBreadcrumb('Fetching Discord clan members');
 			const collection = new Collection<string, GuildMember>();
 			const clanMembers = await this.getClanMembers();
 
 			if (clanMembers.size < 1) {
+				await this.addBreadcrumb('getDiscordClanMembers: no clan members in database', undefined, 'info');
 				return collection;
 			}
 
 			for await (const clanMember of clanMembers.values()) {
-				const member = await this.guild.members.fetch(clanMember.userId).catch(() => {});
+				const member = await this.guild.members.fetch(clanMember.userId).catch(() => undefined);
 
 				if (member) {
 					collection.set(clanMember.userId, member);
@@ -376,80 +441,126 @@ export class ClanManager {
 			}
 
 			this.discordClanMembers = collection;
+			const fetchFailures = clanMembers.size - collection.size;
+			await this.addBreadcrumb('getDiscordClanMembers: completed', {
+				totalInDb: clanMembers.size,
+				fetchedFromDiscord: collection.size,
+				fetchFailures,
+			});
+
+			if (fetchFailures > 0) {
+				await this.addBreadcrumb(
+					'getDiscordClanMembers: some members could not be fetched from Discord',
+					{ fetchFailures },
+					'warning',
+				);
+			}
 		}
 
 		return this.discordClanMembers ?? new Collection<string, GuildMember>();
 	}
 
 	public async createClan(description?: string | null): Promise<ClanCreationStatus> {
+		await this.addBreadcrumb('Starting createClan');
+
 		const clanCategory = await this.getClanCategory();
 
 		if (!clanCategory) {
+			await this.addBreadcrumb('createClan failed: category not configured', undefined, 'warning');
 			return ClanCreationStatus.CategoryNotConfigured;
 		}
 
 		const clanCreationAbility = await this.canCreateClan();
 
 		if (clanCreationAbility === ClanCreationAbilityStatus.MemberNotFound) {
+			await this.addBreadcrumb('createClan failed: member not found', undefined, 'warning');
 			return ClanCreationStatus.MemberNotFound;
 		}
 
 		if (clanCreationAbility === ClanCreationAbilityStatus.NotAble) {
+			await this.addBreadcrumb('createClan failed: not able to create clan', undefined, 'warning');
 			return ClanCreationStatus.NotAble;
 		}
 
 		if (clanCreationAbility === ClanCreationAbilityStatus.AbleButNoCustomRole) {
+			await this.addBreadcrumb('createClan failed: able but no custom role', undefined, 'warning');
 			return ClanCreationStatus.AbleButNoCustomRole;
 		}
 
 		const customRole = await this.getCustomRole();
 
 		if (!customRole) {
+			await this.addBreadcrumb('createClan failed: custom role not found', undefined, 'error');
 			return ClanCreationStatus.CustomRoleNotFound;
 		}
 
 		const existingClan = await this.getClan();
 
 		if (existingClan) {
+			await this.addBreadcrumb('createClan failed: existing clan found', undefined, 'warning');
 			return ClanCreationStatus.ExistingClanFound;
 		}
 
 		void this.log(`Creating clan channel ${customRole.name} for ${this.userId}...`);
+		await this.addBreadcrumb('Creating clan channel', { roleName: customRole.name });
 
 		const clanChannel = await this.createClanChannel();
 
 		if (!clanChannel) {
+			await this.addBreadcrumb('createClan failed: could not create channel', undefined, 'error');
 			return ClanCreationStatus.CouldNotCreateClanChannel;
 		}
 
-		const clan = await container.prisma.clan.create({
-			data: {
-				guildId: this.guildId,
-				customRoleId: customRole.id,
-				channelId: clanChannel.id,
-				description,
-			},
-		});
+		try {
+			await this.addBreadcrumb('Creating clan database entry', { channelId: clanChannel.id });
+			const clan = await container.prisma.clan.create({
+				data: {
+					guildId: this.guildId,
+					customRoleId: customRole.id,
+					channelId: clanChannel.id,
+					description,
+				},
+			});
 
-		await container.prisma.clanMember.create({
-			data: {
-				clanGuildId: clan!.guildId,
-				clanCustomRoleId: clan!.customRoleId,
-				userId: this.getClanOwnerId()!,
-				claimedRole: true,
-			},
-		});
+			await this.addBreadcrumb('Creating clan member entry for owner');
+			await container.prisma.clanMember.create({
+				data: {
+					clanGuildId: clan!.guildId,
+					clanCustomRoleId: clan!.customRoleId,
+					userId: this.getClanOwnerId()!,
+					claimedRole: true,
+				},
+			});
 
-		this.clanChannel = clanChannel;
-		this.clan = clan;
+			this.clanChannel = clanChannel;
+			this.clan = clan;
 
-		return ClanCreationStatus.Created;
+			await this.addBreadcrumb('createClan completed successfully', { clanChannelId: clanChannel.id });
+			return ClanCreationStatus.Created;
+		} catch (error) {
+			await this.addBreadcrumb('createClan database operations failed', { error: String(error) }, 'error');
+			void this.captureError(error as Error, 'createClan: database operations failed');
+			try {
+				await clanChannel.delete('Cleanup after failed clan creation');
+			} catch (cleanupError) {
+				await this.addBreadcrumb(
+					'Failed to cleanup channel after creation failure',
+					{ error: String(cleanupError) },
+					'error',
+				);
+			}
+
+			return ClanCreationStatus.CouldNotCreateClanChannel;
+		}
 	}
 
 	public async deleteClan(): Promise<ClanDeletionStatus> {
+		await this.addBreadcrumb('Starting clan deletion');
+
 		const clan = await this.getClan();
 
 		if (!clan) {
+			await this.addBreadcrumb('Clan deletion failed: clan not found', undefined, 'warning');
 			return ClanDeletionStatus.ClanNotFound;
 		}
 
@@ -457,151 +568,298 @@ export class ClanManager {
 
 		if (clanChannel) {
 			try {
+				await this.addBreadcrumb('Deleting clan channel', { channelId: clanChannel.id });
 				await clanChannel.delete('Member wants to delete their clan');
-			} catch {
+				await this.addBreadcrumb('Clan channel deleted successfully');
+			} catch (error) {
+				await this.addBreadcrumb('Failed to delete clan channel', { error: String(error) }, 'error');
+				void this.captureError(error as Error, 'deleteClan: channel deletion failed');
 				return ClanDeletionStatus.CouldNotDeleteClanChannel;
 			}
+		} else {
+			await this.addBreadcrumb('No clan channel to delete', undefined, 'warning');
 		}
 
 		const discordClanMembers = await this.getDiscordClanMembers();
+		await this.addBreadcrumb('Removing clan role from members', { memberCount: discordClanMembers.size });
 
+		let roleRemovalFailures = 0;
 		for (const member of discordClanMembers.values()) {
 			if (!member.roles.cache.has(clan.customRoleId)) {
 				continue;
 			}
 
-			await member.roles.remove(clan.customRoleId);
+			try {
+				await member.roles.remove(clan.customRoleId);
+				await this.addBreadcrumb('Removed clan role from member', { memberId: member.id });
+			} catch (error) {
+				roleRemovalFailures++;
+				await this.addBreadcrumb(
+					'Failed to remove clan role from member',
+					{ memberId: member.id, error: String(error) },
+					'error',
+				);
+				void this.captureWarning(`Failed to remove clan role from member ${member.id} during clan deletion`, {
+					memberId: member.id,
+					error: String(error),
+				});
+			}
 		}
 
-		await container.prisma.clanMember.deleteMany({
-			where: {
-				clanGuildId: clan.guildId,
-				clanCustomRoleId: clan.customRoleId,
-			},
-		});
+		if (roleRemovalFailures > 0) {
+			await this.addBreadcrumb(
+				'Some role removals failed during deletion',
+				{ failureCount: roleRemovalFailures },
+				'warning',
+			);
+		}
 
-		await container.prisma.clan.delete({
-			where: { guildId_customRoleId: { guildId: clan.guildId, customRoleId: clan.customRoleId } },
-		});
+		try {
+			await this.addBreadcrumb('Deleting clan members from database');
+			await container.prisma.clanMember.deleteMany({
+				where: {
+					clanGuildId: clan.guildId,
+					clanCustomRoleId: clan.customRoleId,
+				},
+			});
+			await this.addBreadcrumb('Clan members deleted from database');
+		} catch (error) {
+			await this.addBreadcrumb('Failed to delete clan members from database', { error: String(error) }, 'error');
+			void this.captureError(error as Error, 'deleteClan: clanMember deleteMany failed');
+		}
 
+		try {
+			await this.addBreadcrumb('Deleting clan from database');
+			await container.prisma.clan.delete({
+				where: { guildId_customRoleId: { guildId: clan.guildId, customRoleId: clan.customRoleId } },
+			});
+			await this.addBreadcrumb('Clan deleted from database');
+		} catch (error) {
+			await this.addBreadcrumb('Failed to delete clan from database', { error: String(error) }, 'error');
+			void this.captureError(error as Error, 'deleteClan: clan delete failed');
+		}
+
+		await this.addBreadcrumb('Clan deletion completed');
 		return ClanDeletionStatus.Deleted;
 	}
 
 	public async makeClanOrphan(force = false): Promise<void> {
+		await this.addBreadcrumb('Starting makeClanOrphan', { force });
+
 		const clan = await this.getClan();
 
 		if (!clan) {
 			void this.logError(`Tried to make clan orphan but no clan found`);
+			await this.addBreadcrumb('makeClanOrphan failed: no clan found', undefined, 'error');
+			void this.captureWarning('Tried to make clan orphan but no clan found');
 			return;
 		}
 
 		if (!force && clan.deletionTaskId) {
+			await this.addBreadcrumb('Clan already orphaned, skipping', { existingTaskId: clan.deletionTaskId });
 			return;
 		}
 
 		const deletionDate = new Duration('1 week').fromNow;
-		const deletionTask = await container.client.schedule.add(
-			'deleteOrphanClan',
-			deletionDate,
-			JSON.stringify({ userId: this.userId, guildId: this.guildId }),
-		);
 
-		await container.prisma.clan.update({
-			where: { guildId_customRoleId: { guildId: this.guild.id, customRoleId: clan.customRoleId } },
-			data: { deletionTaskId: deletionTask.id },
-		});
+		try {
+			await this.addBreadcrumb('Scheduling orphan deletion task', { deletionDate: deletionDate.toISOString() });
+			const deletionTask = await container.client.schedule.add(
+				'deleteOrphanClan',
+				deletionDate,
+				JSON.stringify({ userId: this.userId, guildId: this.guildId }),
+			);
 
-		void this.log(`Set deletion task ID`, deletionTask.id);
+			await this.addBreadcrumb('Updating clan with deletion task ID', { taskId: deletionTask.id });
+			await container.prisma.clan.update({
+				where: { guildId_customRoleId: { guildId: this.guild.id, customRoleId: clan.customRoleId } },
+				data: { deletionTaskId: deletionTask.id },
+			});
+
+			void this.log(`Set deletion task ID`, deletionTask.id);
+			await this.addBreadcrumb('Clan marked as orphan successfully', { taskId: deletionTask.id });
+		} catch (error) {
+			await this.addBreadcrumb('Failed to make clan orphan', { error: String(error) }, 'error');
+			void this.logError('Failed to make clan orphan:', error);
+			void this.captureError(error as Error, 'makeClanOrphan: scheduling or database update failed');
+		}
 	}
 
 	public async makeClanNotOrphan(): Promise<void> {
+		await this.addBreadcrumb('Starting makeClanNotOrphan');
 		await this.getClan();
 
 		if (!this.getClanOwnerId()) {
 			void this.logError(`Tried to make clan *not* orphan but no owner id found`);
+			await this.addBreadcrumb('makeClanNotOrphan failed: no owner id', undefined, 'error');
+			void this.captureWarning('Tried to make clan not orphan but no owner id found');
 			return;
 		}
 
 		if (!this.clan?.deletionTaskId) {
+			await this.addBreadcrumb('Clan not orphaned (no deletion task), skipping');
 			return;
 		}
 
-		await container.client.schedule.remove(this.clan.deletionTaskId);
-		await container.prisma.clan.update({
-			where: { guildId_customRoleId: { guildId: this.guild.id, customRoleId: this.clan.customRoleId } },
-			data: { deletionTaskId: null },
-		});
+		try {
+			await this.addBreadcrumb('Removing scheduled deletion task', { taskId: this.clan.deletionTaskId });
+			await container.client.schedule.remove(this.clan.deletionTaskId);
+			await this.addBreadcrumb('Clearing deletion task ID in database');
+			await container.prisma.clan.update({
+				where: { guildId_customRoleId: { guildId: this.guild.id, customRoleId: this.clan.customRoleId } },
+				data: { deletionTaskId: null },
+			});
+			await this.addBreadcrumb('Deletion task removed successfully');
+		} catch (error) {
+			await this.addBreadcrumb('Failed to remove deletion task', { error: String(error) }, 'error');
+			void this.logError('Failed to remove deletion task:', error);
+			void this.captureError(error as Error, 'makeClanNotOrphan: failed to remove deletion task');
+		}
 
 		void this.log(`Deleted deletion task to make clan not orphan.`);
 
+		await this.addBreadcrumb('Re-adding owner to clan', { ownerId: this.getClanOwnerId() });
 		const clanMemberAddStatus = await this.inviteMember(this.getClanOwnerId()!, true);
 
 		if (clanMemberAddStatus !== ClanMemberAddStatus.Added) {
-			void this.logError(
-				`Could not add owner back: `,
-				ClanManager.getMemberAddStatusMessage(clanMemberAddStatus),
+			const statusMessage = ClanManager.getMemberAddStatusMessage(clanMemberAddStatus);
+			void this.logError(`Could not add owner back: `, statusMessage);
+			await this.addBreadcrumb(
+				'Failed to re-add owner to clan',
+				{ status: clanMemberAddStatus, statusMessage },
+				'error',
 			);
-
+			void this.captureWarning(`Could not add owner back during makeClanNotOrphan: ${statusMessage}`, {
+				status: clanMemberAddStatus,
+			});
 			return;
 		}
+
+		await this.addBreadcrumb('Owner re-added to clan successfully');
 
 		const channel = await this.getClanChannel();
 
 		if (!channel) {
 			void this.logError(`Clan channel does not seem to exist anymore.`);
-
+			await this.addBreadcrumb('Clan channel not found during recovery', undefined, 'error');
+			void this.captureWarning('Clan channel not found during makeClanNotOrphan');
 			return;
 		}
 
-		await this.giveOwnerPermissions(channel, this.getClanOwnerId()!).catch((error: Error) => {
+		await this.giveOwnerPermissions(channel, this.getClanOwnerId()!).catch(async (error: Error) => {
 			void this.logError(`Restoring clan channel permissions setting for owner failed: `, error);
+			await this.addBreadcrumb('Failed to restore owner permissions', { error: String(error) }, 'error');
+			void this.captureError(error, 'makeClanNotOrphan: failed to restore owner permissions');
 		});
 
 		void this.log(`Restored clan channel permissions setting for owner.`);
+		await this.addBreadcrumb('makeClanNotOrphan completed successfully');
 	}
 
 	public async deleteOrphanClan(): Promise<void> {
+		await this.addBreadcrumb('Starting deleteOrphanClan (scheduled task)');
+
 		const clan = await this.getClan();
 
 		if (!this.getClanOwnerId()) {
 			void this.logError(`Could not delete orphan clan: no owner id found`);
+			await this.addBreadcrumb('deleteOrphanClan failed: no owner id', undefined, 'error');
+			void this.captureWarning('Could not delete orphan clan: no owner id found');
 			return;
 		}
 
 		if (!clan?.deletionTaskId) {
-			void this.logError(`Could not delete orphan clan: no ${clan ? 'deletion task id' : 'clan'} found`);
+			const reason = clan ? 'deletion task id' : 'clan';
+			void this.logError(`Could not delete orphan clan: no ${reason} found`);
+			await this.addBreadcrumb(
+				'deleteOrphanClan failed: missing data',
+				{ hasClan: Boolean(clan), hasTaskId: Boolean(clan?.deletionTaskId) },
+				'error',
+			);
+			void this.captureWarning(`Could not delete orphan clan: no ${reason} found`);
 			return;
 		}
 
+		await this.addBreadcrumb('Deleting orphan clan', { deletionTaskId: clan.deletionTaskId });
 		const clanDeletionStatus = await this.deleteClan();
 
 		if (clanDeletionStatus !== ClanDeletionStatus.Deleted) {
-			void this.logError(
-				`Could not delete orphan clan:`,
-				ClanManager.getDeletionStatusMessage(clanDeletionStatus),
+			const statusMessage = ClanManager.getDeletionStatusMessage(clanDeletionStatus);
+			void this.logError(`Could not delete orphan clan:`, statusMessage);
+			await this.addBreadcrumb(
+				'Orphan clan deletion failed',
+				{ status: clanDeletionStatus, statusMessage },
+				'error',
 			);
-
+			void this.captureError(new Error(`Orphan clan deletion failed: ${statusMessage}`), 'deleteOrphanClan', {
+				status: clanDeletionStatus,
+			});
 			return;
 		}
+
+		await this.addBreadcrumb('Orphan clan deleted, cleaning up premium member data');
 
 		const premiumMember = await this.getPremiumMember();
 
 		if (premiumMember) {
-			await ClanManager.deletePremiumRole(premiumMember);
-			await ClanManager.deleteGiftedRole(premiumMember);
+			await this.addBreadcrumb('Deleting premium role', { premiumUserId: premiumMember.userId });
+			try {
+				await ClanManager.deletePremiumRole(premiumMember);
+				await this.addBreadcrumb('Premium role deleted');
+			} catch (error) {
+				await this.addBreadcrumb('Failed to delete premium role', { error: String(error) }, 'error');
+				void this.captureError(error as Error, 'deleteOrphanClan: deletePremiumRole failed');
+			}
+
+			await this.addBreadcrumb('Deleting gifted role');
+			try {
+				await ClanManager.deleteGiftedRole(premiumMember);
+				await this.addBreadcrumb('Gifted role deleted');
+			} catch (error) {
+				await this.addBreadcrumb('Failed to delete gifted role', { error: String(error) }, 'error');
+				void this.captureError(error as Error, 'deleteOrphanClan: deleteGiftedRole failed');
+			}
 		}
 
-		await container.prisma.clanMember.deleteMany({
-			where: { clanGuildId: this.guildId, userId: this.userId },
-		});
+		try {
+			await this.addBreadcrumb('Cleaning up remaining clan member entries');
+			await container.prisma.clanMember.deleteMany({
+				where: { clanGuildId: this.guildId, userId: this.userId },
+			});
+			await this.addBreadcrumb('Clan member entries cleaned up');
+		} catch (error) {
+			await this.addBreadcrumb('Failed to clean up clan member entries', { error: String(error) }, 'error');
+			void this.captureError(error as Error, 'deleteOrphanClan: clanMember cleanup failed');
+		}
 
 		void this.log(`Removed every clan member after clan deletion`);
+		await this.addBreadcrumb('deleteOrphanClan completed');
 	}
 
 	public static async deletePremiumRole(premiumMember: PremiumMember): Promise<void> {
+		const logPrefix = `[PREMIUM @${premiumMember.userId}@&${premiumMember.customRoleId}]`;
+		const tags = {
+			userId: premiumMember.userId,
+			guildId: premiumMember.guildId,
+			customRoleId: premiumMember.customRoleId ?? 'none',
+		};
+
+		Sentry.addBreadcrumb({
+			category: 'clan',
+			message: `${logPrefix} Starting deletePremiumRole`,
+			level: 'info',
+			data: tags,
+		});
+
 		const guild = container.client.guilds.cache.get(premiumMember.guildId);
 
 		if (!guild || !premiumMember?.customRoleId) {
+			Sentry.addBreadcrumb({
+				category: 'clan',
+				message: `${logPrefix} deletePremiumRole skipped: guild not found or no custom role`,
+				level: 'warning',
+				data: { ...tags, hasGuild: Boolean(guild), hasCustomRoleId: Boolean(premiumMember?.customRoleId) },
+			});
 			return;
 		}
 
@@ -611,37 +869,93 @@ export class ClanManager {
 				'Member who created custom role either left the server or lost premium role',
 			);
 
-			container.logger.info(
-				`[PREMIUM @${premiumMember.userId}@&${premiumMember.customRoleId}] Deleted custom premium role (Discord)`,
-			);
+			container.logger.info(`${logPrefix} Deleted custom premium role (Discord)`);
+			Sentry.addBreadcrumb({
+				category: 'clan',
+				message: `${logPrefix} Deleted custom premium role (Discord)`,
+				level: 'info',
+				data: tags,
+			});
 		} catch (error) {
-			container.logger.error(
-				`[PREMIUM @${premiumMember.userId}@&${premiumMember.customRoleId}] Failed to delete custom premium role`,
-				{
-					userId: premiumMember.userId,
-					guildId: premiumMember.guildId,
-					error,
-				},
-			);
+			container.logger.error(`${logPrefix} Failed to delete custom premium role`, {
+				userId: premiumMember.userId,
+				guildId: premiumMember.guildId,
+				error,
+			});
+			Sentry.addBreadcrumb({
+				category: 'clan',
+				message: `${logPrefix} Failed to delete custom premium role`,
+				level: 'error',
+				data: { ...tags, error: String(error) },
+			});
+			Sentry.withScope((scope) => {
+				scope.setTags(tags);
+				scope.setTag('operation', 'deletePremiumRole');
+				Sentry.captureException(error);
+			});
 		}
 
-		await container.prisma.premiumMember.update({
-			where: { guildId_userId: { guildId: premiumMember.guildId, userId: premiumMember.userId } },
-			data: { customRoleId: null },
-		});
+		try {
+			await container.prisma.premiumMember.update({
+				where: { guildId_userId: { guildId: premiumMember.guildId, userId: premiumMember.userId } },
+				data: { customRoleId: null },
+			});
 
-		container.logger.info(
-			`[PREMIUM @${premiumMember.userId}@&${premiumMember.customRoleId}] Deleted custom premium role (database)`,
-		);
+			container.logger.info(`${logPrefix} Deleted custom premium role (database)`);
+			Sentry.addBreadcrumb({
+				category: 'clan',
+				message: `${logPrefix} Deleted custom premium role (database)`,
+				level: 'info',
+				data: tags,
+			});
+		} catch (error) {
+			Sentry.addBreadcrumb({
+				category: 'clan',
+				message: `${logPrefix} Failed to update database after role deletion`,
+				level: 'error',
+				data: { ...tags, error: String(error) },
+			});
+			Sentry.withScope((scope) => {
+				scope.setTags(tags);
+				scope.setTag('operation', 'deletePremiumRole');
+				scope.setExtra('context', 'database update after Discord role deletion');
+				Sentry.captureException(error);
+			});
+		}
 	}
 
 	public static async deleteGiftedRole(premiumMember: PremiumMember): Promise<void> {
+		const logPrefix = `[PREMIUM @${premiumMember.userId}@&${premiumMember.customRoleId}]`;
+		const tags = {
+			userId: premiumMember.userId,
+			guildId: premiumMember.guildId,
+			giftedToUserId: premiumMember.giftedRoleToUserId ?? 'none',
+		};
+
+		Sentry.addBreadcrumb({
+			category: 'clan',
+			message: `${logPrefix} Starting deleteGiftedRole`,
+			level: 'info',
+			data: tags,
+		});
+
 		const guild = container.client.guilds.cache.get(premiumMember.guildId);
 		const guildConfig = await container.prisma.premiumGuildRoleConfig.findFirst({
 			where: { guildId: premiumMember.guildId },
 		});
 
 		if (!guild || !premiumMember?.giftedRoleToUserId || !guildConfig?.legendRoleId) {
+			Sentry.addBreadcrumb({
+				category: 'clan',
+				message: `${logPrefix} deleteGiftedRole skipped: missing data`,
+				level: 'warning',
+				data: {
+					...tags,
+					hasGuild: Boolean(guild),
+					hasGiftedUserId: Boolean(premiumMember?.giftedRoleToUserId),
+					hasLegendRoleId: Boolean(guildConfig?.legendRoleId),
+				},
+			});
 			return;
 		}
 
@@ -650,89 +964,185 @@ export class ClanManager {
 		if (giftedUser) {
 			try {
 				await giftedUser.roles.remove(guildConfig.legendRoleId, 'Original premium member left server');
-				container.logger.info(
-					`[PREMIUM @${premiumMember.userId}@&${premiumMember.customRoleId}] Deleted gifted role (Discord)`,
-				);
+				container.logger.info(`${logPrefix} Deleted gifted role (Discord)`);
+				Sentry.addBreadcrumb({
+					category: 'clan',
+					message: `${logPrefix} Deleted gifted role (Discord)`,
+					level: 'info',
+					data: { ...tags, giftedUserId: giftedUser.id },
+				});
 			} catch (error) {
-				container.logger.error(
-					`[PREMIUM @${premiumMember.userId}@&${premiumMember.customRoleId}] Failed to remove gifted role`,
-					{
-						userId: giftedUser.id,
-						guildId: premiumMember.guildId,
-						giftedBy: premiumMember.userId,
-						error,
-					},
-				);
+				container.logger.error(`${logPrefix} Failed to remove gifted role`, {
+					userId: giftedUser.id,
+					guildId: premiumMember.guildId,
+					giftedBy: premiumMember.userId,
+					error,
+				});
+				Sentry.addBreadcrumb({
+					category: 'clan',
+					message: `${logPrefix} Failed to remove gifted role`,
+					level: 'error',
+					data: { ...tags, giftedUserId: giftedUser.id, error: String(error) },
+				});
+				Sentry.withScope((scope) => {
+					scope.setTags(tags);
+					scope.setTag('operation', 'deleteGiftedRole');
+					Sentry.captureException(error);
+				});
 			}
+		} else {
+			Sentry.addBreadcrumb({
+				category: 'clan',
+				message: `${logPrefix} Gifted user not found in guild`,
+				level: 'warning',
+				data: tags,
+			});
 		}
 
-		await container.prisma.premiumMember.update({
-			where: { guildId_userId: { guildId: premiumMember.guildId, userId: premiumMember.userId } },
-			data: { giftedRoleToUserId: null },
-		});
+		try {
+			await container.prisma.premiumMember.update({
+				where: { guildId_userId: { guildId: premiumMember.guildId, userId: premiumMember.userId } },
+				data: { giftedRoleToUserId: null },
+			});
 
-		container.logger.info(
-			`[PREMIUM @${premiumMember.userId}@&${premiumMember.customRoleId}] Deleted gifted role (database)`,
-		);
+			container.logger.info(`${logPrefix} Deleted gifted role (database)`);
+			Sentry.addBreadcrumb({
+				category: 'clan',
+				message: `${logPrefix} Deleted gifted role (database)`,
+				level: 'info',
+				data: tags,
+			});
+		} catch (error) {
+			Sentry.addBreadcrumb({
+				category: 'clan',
+				message: `${logPrefix} Failed to update database after gifted role removal`,
+				level: 'error',
+				data: { ...tags, error: String(error) },
+			});
+			Sentry.withScope((scope) => {
+				scope.setTags(tags);
+				scope.setTag('operation', 'deleteGiftedRole');
+				scope.setExtra('context', 'database update after gifted role removal');
+				Sentry.captureException(error);
+			});
+		}
 	}
 
 	public async inviteMember(memberId: string, force = false): Promise<ClanMemberAddStatus> {
+		await this.addBreadcrumb('Starting inviteMember', { invitedMemberId: memberId, force });
+
 		const clan = await this.getClan();
 
 		if (!clan) {
+			await this.addBreadcrumb('inviteMember failed: clan not found', { invitedMemberId: memberId }, 'warning');
 			return ClanMemberAddStatus.ClanNotFound;
 		}
 
 		const clanMembers = await this.getDiscordClanMembers();
 
 		if (clanMembers.has(memberId) && !force) {
+			await this.addBreadcrumb('inviteMember skipped: already in clan', { invitedMemberId: memberId });
 			return ClanMemberAddStatus.AlreadyInClan;
 		}
 
 		const invitedMember = await this.guild.members.fetch(memberId).catch(() => {});
 
 		if (!invitedMember) {
+			await this.addBreadcrumb('inviteMember failed: member not found', { invitedMemberId: memberId }, 'warning');
 			return ClanMemberAddStatus.InvitedMemberNotFound;
 		}
 
 		const customRoleId = await this.getCustomRoleId();
 		const clanChannel = await this.getClanChannel();
+
+		await this.addBreadcrumb('Adding permission overwrite for member', {
+			invitedMemberId: memberId,
+			channelId: clanChannel?.id,
+		});
 		const addedToChannel = await clanChannel?.permissionOverwrites
 			.create(invitedMember, {
 				ViewChannel: true,
 			})
 			.then(() => true)
-			.catch(() => false);
+			.catch(async (error) => {
+				await this.addBreadcrumb(
+					'Failed to add permission overwrite',
+					{ invitedMemberId: memberId, error: String(error) },
+					'error',
+				);
+				void this.captureWarning(`Failed to add permission overwrite for member ${memberId}`, {
+					error: String(error),
+				});
+				return false;
+			});
 
 		if (!addedToChannel) {
+			await this.addBreadcrumb(
+				'inviteMember failed: could not add to channel',
+				{ invitedMemberId: memberId },
+				'error',
+			);
 			return ClanMemberAddStatus.CouldNotAddToChannel;
 		}
 
+		await this.addBreadcrumb('Permission overwrite added successfully', { invitedMemberId: memberId });
+
 		if (!clanMembers.has(memberId)) {
-			await container.prisma.clanMember.create({
-				data: {
-					clanGuildId: clan.guildId,
-					clanCustomRoleId: clan.customRoleId,
-					userId: invitedMember.id,
-					claimedRole: true,
-				},
+			try {
+				await this.addBreadcrumb('Creating clan member entry in database', { invitedMemberId: memberId });
+				await container.prisma.clanMember.create({
+					data: {
+						clanGuildId: clan.guildId,
+						clanCustomRoleId: clan.customRoleId,
+						userId: invitedMember.id,
+						claimedRole: true,
+					},
+				});
+				await this.addBreadcrumb('Clan member entry created', { invitedMemberId: memberId });
+			} catch (error) {
+				await this.addBreadcrumb(
+					'Failed to create clan member entry',
+					{ invitedMemberId: memberId, error: String(error) },
+					'error',
+				);
+				void this.captureError(error as Error, 'inviteMember: database insert failed', {
+					invitedMemberId: memberId,
+				});
+			}
+		}
+
+		try {
+			await this.addBreadcrumb('Adding clan role to member', { invitedMemberId: memberId, roleId: customRoleId });
+			await invitedMember.roles.add(customRoleId!);
+			await this.addBreadcrumb('Clan role added successfully', { invitedMemberId: memberId });
+		} catch (error) {
+			await this.addBreadcrumb(
+				'Failed to add clan role to member',
+				{ invitedMemberId: memberId, error: String(error) },
+				'error',
+			);
+			void this.captureError(error as Error, 'inviteMember: role add failed', {
+				invitedMemberId: memberId,
+				roleId: customRoleId,
 			});
 		}
 
-		await invitedMember.roles.add(customRoleId!);
-
 		this.invalidateCache('clanMembers');
 
+		await this.addBreadcrumb('inviteMember completed', { invitedMemberId: memberId });
 		return ClanMemberAddStatus.Added;
 	}
 
 	public async removeMember(member: GuildMember): Promise<ClanMemberRemoveStatus> {
 		await this.log(`Trying to remove member ${member.user.username} (${member.id})`);
+		await this.addBreadcrumb('Starting removeMember', { memberId: member.id, memberTag: member.user.tag });
 
 		const clan = await this.getClan();
 
 		if (!clan) {
 			await this.log(`Could not remove member ${member.user.username} (${member.id}): no clan found`);
+			await this.addBreadcrumb('removeMember failed: no clan found', { memberId: member.id }, 'error');
+			void this.captureWarning(`removeMember called but no clan found for member ${member.id}`);
 			return ClanMemberRemoveStatus.ClanNotFound;
 		}
 
@@ -742,38 +1152,118 @@ export class ClanManager {
 
 		await ensureFullMember(member);
 
+		let roleRemoved = false;
+		let permissionsRemoved = false;
+		let databaseEntryRemoved = false;
+
 		if (customRoleId && member.roles.cache.has(customRoleId)) {
 			await this.log(`Removing member ${member.user.username} (${member.id}): removing custom role first`);
-			await member.roles.remove(customRoleId);
-			await this.log(`Removing member ${member.user.username} (${member.id}): removed custom role`);
+			await this.addBreadcrumb('Removing clan role from member', { memberId: member.id, roleId: customRoleId });
+			try {
+				await member.roles.remove(customRoleId);
+				roleRemoved = true;
+				await this.log(`Removing member ${member.user.username} (${member.id}): removed custom role`);
+				await this.addBreadcrumb('Clan role removed from member', { memberId: member.id });
+			} catch (error) {
+				await this.addBreadcrumb(
+					'Failed to remove clan role from member',
+					{ memberId: member.id, error: String(error) },
+					'error',
+				);
+				void this.logError(`Failed to remove role from member ${member.id}:`, error);
+				void this.captureError(error as Error, 'removeMember: role removal failed', {
+					memberId: member.id,
+					roleId: customRoleId,
+				});
+			}
+		} else {
+			await this.addBreadcrumb('Member does not have clan role, skipping role removal', {
+				memberId: member.id,
+				roleId: customRoleId,
+			});
+			roleRemoved = true;
 		}
 
 		await this.log(`Removing member ${member.user.username} (${member.id}): removing permission overwrites`);
-		await clanChannel?.permissionOverwrites.delete(member.id);
-		await this.log(`Removing member ${member.user.username} (${member.id}): removed permission overwrites`);
+		await this.addBreadcrumb('Removing permission overwrites', { memberId: member.id, channelId: clanChannel?.id });
+		try {
+			await clanChannel?.permissionOverwrites.delete(member.id);
+			permissionsRemoved = true;
+			await this.log(`Removing member ${member.user.username} (${member.id}): removed permission overwrites`);
+			await this.addBreadcrumb('Permission overwrites removed', { memberId: member.id });
+		} catch (error) {
+			await this.addBreadcrumb(
+				'Failed to remove permission overwrites',
+				{ memberId: member.id, error: String(error) },
+				'error',
+			);
+			void this.logError(`Failed to remove permission overwrites for member ${member.id}:`, error);
+			void this.captureError(error as Error, 'removeMember: permission overwrite deletion failed', {
+				memberId: member.id,
+				channelId: clanChannel?.id,
+			});
+		}
 
 		await this.log(`Removing member ${member.user.username} (${member.id}): deleting clan member entry`);
-		await container.prisma.clanMember.delete({
-			where: {
-				clanGuildId_clanCustomRoleId_userId: {
-					clanGuildId: clan!.guildId,
-					clanCustomRoleId: clan!.customRoleId,
-					userId: member.id,
+		await this.addBreadcrumb('Deleting clan member database entry', { memberId: member.id });
+		try {
+			await container.prisma.clanMember.delete({
+				where: {
+					clanGuildId_clanCustomRoleId_userId: {
+						clanGuildId: clan!.guildId,
+						clanCustomRoleId: clan!.customRoleId,
+						userId: member.id,
+					},
 				},
-			},
-		});
-		await this.log(`Removing member ${member.user.username} (${member.id}): deleted clan member entry`);
+			});
+			databaseEntryRemoved = true;
+			await this.log(`Removing member ${member.user.username} (${member.id}): deleted clan member entry`);
+			await this.addBreadcrumb('Clan member database entry deleted', { memberId: member.id });
+		} catch (error) {
+			await this.addBreadcrumb(
+				'Failed to delete clan member database entry',
+				{ memberId: member.id, error: String(error) },
+				'error',
+			);
+			void this.logError(`Failed to delete clan member entry for ${member.id}:`, error);
+			void this.captureError(error as Error, 'removeMember: database deletion failed', { memberId: member.id });
+		}
 
 		this.invalidateCache('clanMembers');
 
-		return clanMembers.has(member.id) ? ClanMemberRemoveStatus.Removed : ClanMemberRemoveStatus.NotInClan;
+		const wasInClan = clanMembers.has(member.id);
+		const result = wasInClan ? ClanMemberRemoveStatus.Removed : ClanMemberRemoveStatus.NotInClan;
+
+		await this.addBreadcrumb('removeMember completed', {
+			memberId: member.id,
+			roleRemoved,
+			permissionsRemoved,
+			databaseEntryRemoved,
+			wasInClan,
+			result,
+		});
+
+		if (!roleRemoved || !permissionsRemoved || !databaseEntryRemoved) {
+			void this.captureWarning(`removeMember completed with partial failures for member ${member.id}`, {
+				roleRemoved,
+				permissionsRemoved,
+				databaseEntryRemoved,
+			});
+		}
+
+		return result;
 	}
 
 	public async getCustomRoleId(): Promise<string | undefined> {
 		if (!this.customRoleId) {
+			await this.addBreadcrumb('Resolving custom role ID');
 			const premiumMember = await this.getPremiumMember();
 
 			this.customRoleId = premiumMember?.customRoleId ?? this.userOrCustomRoleId;
+			await this.addBreadcrumb('getCustomRoleId: resolved', {
+				customRoleId: this.customRoleId ?? 'none',
+				source: premiumMember?.customRoleId ? 'premiumMember' : 'userOrCustomRoleId',
+			});
 		}
 
 		return this.customRoleId;
@@ -788,18 +1278,30 @@ export class ClanManager {
 	}
 
 	private async createClanChannel(): Promise<TextChannel | undefined> {
+		await this.addBreadcrumb('Starting createClanChannel');
+
 		const customRole = await this.getCustomRole();
 
 		if (!customRole || !this.getClanOwnerId()) {
+			await this.addBreadcrumb(
+				'createClanChannel skipped: missing role or owner',
+				{ hasRole: Boolean(customRole), hasOwner: Boolean(this.getClanOwnerId()) },
+				'warning',
+			);
 			return;
 		}
 
 		const clanCategory = await this.getClanCategory();
 
 		if (!clanCategory) {
+			await this.addBreadcrumb('createClanChannel failed: no clan category configured', undefined, 'error');
 			return;
 		}
 
+		await this.addBreadcrumb('Creating Discord channel', {
+			roleName: customRole.name,
+			categoryId: clanCategory.id,
+		});
 		const clanChannel = await this.guild.channels
 			.create({
 				name: customRole.name,
@@ -808,18 +1310,27 @@ export class ClanManager {
 				topic: 'Clan channel for ' + customRole.name,
 				reason: 'Creating clan channel for ' + this.userId,
 			})
-			.catch((error) => void this.logError(`Clan channel creation failed: `, error));
+			.catch(async (error) => {
+				void this.logError(`Clan channel creation failed: `, error);
+				await this.addBreadcrumb('Failed to create Discord channel', { error: String(error) }, 'error');
+				void this.captureError(error as Error, 'createClanChannel: channel creation failed');
+			});
 
 		if (!clanChannel) {
 			return;
 		}
 
+		await this.addBreadcrumb('Discord channel created', { channelId: clanChannel.id });
+
 		let errorHappened = false;
 
-		await clanChannel.lockPermissions().catch((error) => {
+		await clanChannel.lockPermissions().catch(async (error) => {
 			errorHappened = true;
 			void this.logError(`Clan channel permissions locking failed: `, error);
+			await this.addBreadcrumb('Failed to lock channel permissions', { error: String(error) }, 'error');
+			void this.captureError(error as Error, 'createClanChannel: lockPermissions failed');
 		});
+
 		await clanChannel.permissionOverwrites
 			.edit(this.guild.roles.everyone.id, {
 				ViewChannel: false,
@@ -834,21 +1345,42 @@ export class ClanManager {
 				UseExternalStickers: true,
 				UseExternalApps: true,
 			})
-			.catch((error) => {
+			.catch(async (error) => {
 				errorHappened = true;
 				void this.logError(`Clan channel permissions setting for @everyone failed: `, error);
+				await this.addBreadcrumb('Failed to set @everyone permissions', { error: String(error) }, 'error');
+				void this.captureError(error as Error, 'createClanChannel: @everyone permissions failed');
 			});
 
-		await this.giveOwnerPermissions(clanChannel, this.getClanOwnerId()!).catch((error: Error) => {
+		await this.giveOwnerPermissions(clanChannel, this.getClanOwnerId()!).catch(async (error: Error) => {
 			errorHappened = true;
 			void this.logError(`Clan channel permissions setting for owner failed: `, error);
+			await this.addBreadcrumb('Failed to set owner permissions', { error: String(error) }, 'error');
+			void this.captureError(error, 'createClanChannel: owner permissions failed');
 		});
 
 		if (errorHappened) {
-			await clanChannel.delete();
+			await this.addBreadcrumb(
+				'Deleting channel due to permission errors',
+				{ channelId: clanChannel.id },
+				'warning',
+			);
+			try {
+				await clanChannel.delete();
+				await this.addBreadcrumb('Channel deleted after permission errors');
+			} catch (deleteError) {
+				await this.addBreadcrumb(
+					'Failed to delete channel after permission errors',
+					{ error: String(deleteError) },
+					'error',
+				);
+				void this.captureError(deleteError as Error, 'createClanChannel: cleanup deletion failed');
+			}
+
 			return;
 		}
 
+		await this.addBreadcrumb('createClanChannel completed', { channelId: clanChannel.id });
 		return clanChannel;
 	}
 
@@ -864,9 +1396,27 @@ export class ClanManager {
 
 	private async getPremiumMember(): Promise<PremiumMember | null> {
 		if (this.premiumMember === undefined) {
-			this.premiumMember = await container.prisma.premiumMember.findFirst({
-				where: { guildId: this.guildId, userId: this.getClanOwnerId() ?? this.userOrCustomRoleId },
-			});
+			await this.addBreadcrumb('Fetching premium member from database');
+			const lookupId = this.getClanOwnerId() ?? this.userOrCustomRoleId;
+
+			try {
+				this.premiumMember = await container.prisma.premiumMember.findFirst({
+					where: { guildId: this.guildId, userId: lookupId },
+				});
+				await this.addBreadcrumb('getPremiumMember: database query completed', {
+					found: Boolean(this.premiumMember),
+					lookupId,
+					hasCustomRole: Boolean(this.premiumMember?.customRoleId),
+				});
+			} catch (error) {
+				await this.addBreadcrumb(
+					'getPremiumMember: database query failed',
+					{ error: String(error), lookupId },
+					'error',
+				);
+				void this.captureError(error as Error, 'getPremiumMember: database query failed');
+				return null;
+			}
 		}
 
 		if (!this.userId && this.premiumMember?.userId === this.userOrCustomRoleId) {
@@ -918,5 +1468,67 @@ export class ClanManager {
 
 	private async logError(...log: readonly unknown[]): Promise<void> {
 		return this.doLog(log, 'error');
+	}
+
+	private async getSentryTags(): Promise<Record<string, string>> {
+		return {
+			userId: this.getClanOwnerId() ?? 'unknown',
+			guildId: this.guildId,
+			customRoleId: (await this.getCustomRoleId()) ?? 'unknown',
+			clanChannelId: (await this.getClanChannel())?.id ?? 'unknown',
+		};
+	}
+
+	private async addBreadcrumb(
+		message: string,
+		data?: Record<string, unknown>,
+		level: Sentry.SeverityLevel = 'info',
+	): Promise<void> {
+		const tags = await this.getSentryTags();
+		Sentry.addBreadcrumb({
+			category: 'clan',
+			message: `${await this.getLogPrefix()}${message}`,
+			level,
+			data: { ...tags, ...data },
+		});
+	}
+
+	private async captureError(
+		error: Error | string,
+		context?: string,
+		extra?: Record<string, unknown>,
+	): Promise<void> {
+		const tags = await this.getSentryTags();
+		const errorMessage = error instanceof Error ? error : new Error(error);
+
+		Sentry.withScope((scope) => {
+			scope.setTags(tags);
+			scope.setTag('operation', 'clan');
+			if (context) {
+				scope.setExtra('context', context);
+			}
+
+			if (extra) {
+				scope.setExtras(extra);
+			}
+
+			Sentry.captureException(errorMessage);
+		});
+	}
+
+	private async captureWarning(message: string, extra?: Record<string, unknown>): Promise<void> {
+		const tags = await this.getSentryTags();
+		const logPrefix = await this.getLogPrefix();
+
+		Sentry.withScope((scope) => {
+			scope.setTags(tags);
+			scope.setTag('operation', 'clan');
+			scope.setLevel('warning');
+			if (extra) {
+				scope.setExtras(extra);
+			}
+
+			Sentry.captureMessage(`${logPrefix}${message}`, 'warning');
+		});
 	}
 }

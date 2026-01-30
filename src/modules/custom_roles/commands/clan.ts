@@ -1,6 +1,7 @@
 import { PaginatedMessage } from '@sapphire/discord.js-utilities';
 import { Subcommand, type SubcommandMappingArray } from '@sapphire/plugin-subcommands';
 import { chunk } from '@sapphire/utilities';
+import * as Sentry from '@sentry/node';
 import { ChannelType, MessageFlags } from 'discord-api-types/v10';
 import {
 	ActionRowBuilder,
@@ -521,8 +522,24 @@ export class ClanCommand extends Subcommand {
 		await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
 		const memberToKick = interaction.options.getMember('member');
+		const logPrefix = `[CLAN KICK @${interaction.user.id}]`;
+		const tags = { kickerId: interaction.user.id, guildId: interaction.guildId };
+
+		Sentry.addBreadcrumb({
+			category: 'clan',
+			message: `${logPrefix} User initiated /clan kick command`,
+			level: 'info',
+			data: { ...tags, targetMemberId: memberToKick?.id },
+		});
 
 		if (!memberToKick) {
+			Sentry.addBreadcrumb({
+				category: 'clan',
+				message: `${logPrefix} Kick rejected: target member not found`,
+				level: 'warning',
+				data: tags,
+			});
+
 			await interaction.editReply({
 				embeds: [createErrorEmbed('The provided member could not be found.')],
 			});
@@ -531,19 +548,72 @@ export class ClanCommand extends Subcommand {
 		}
 
 		const clanManager = new ClanManager(interaction.member);
-		const clanMemberRemoveStatus = await clanManager.removeMember(memberToKick);
+		const customRoleId = await clanManager.getCustomRoleId();
 
-		if (clanMemberRemoveStatus !== ClanMemberRemoveStatus.Removed) {
-			await interaction.editReply({
-				embeds: [createErrorEmbed(ClanManager.getMemberRemoveStatusMessage(clanMemberRemoveStatus))],
+		Sentry.addBreadcrumb({
+			category: 'clan',
+			message: `${logPrefix} Starting member removal`,
+			level: 'info',
+			data: { ...tags, targetMemberId: memberToKick.id, targetMemberTag: memberToKick.user.tag, customRoleId },
+		});
+
+		try {
+			const clanMemberRemoveStatus = await clanManager.removeMember(memberToKick);
+
+			Sentry.addBreadcrumb({
+				category: 'clan',
+				message: `${logPrefix} removeMember completed`,
+				level: 'info',
+				data: {
+					...tags,
+					targetMemberId: memberToKick.id,
+					removeStatus: clanMemberRemoveStatus,
+					removeStatusName: ClanMemberRemoveStatus[clanMemberRemoveStatus],
+				},
 			});
 
-			return;
-		}
+			if (clanMemberRemoveStatus !== ClanMemberRemoveStatus.Removed) {
+				Sentry.addBreadcrumb({
+					category: 'clan',
+					message: `${logPrefix} Kick failed: member not removed`,
+					level: 'warning',
+					data: { ...tags, targetMemberId: memberToKick.id, removeStatus: clanMemberRemoveStatus },
+				});
 
-		await interaction.editReply({
-			embeds: [createInfoEmbed(`# 👢 Member kicked\nThe member has been kicked from the clan.`)],
-		});
+				await interaction.editReply({
+					embeds: [createErrorEmbed(ClanManager.getMemberRemoveStatusMessage(clanMemberRemoveStatus))],
+				});
+
+				return;
+			}
+
+			await interaction.editReply({
+				embeds: [createInfoEmbed(`# 👢 Member kicked\nThe member has been kicked from the clan.`)],
+			});
+
+			Sentry.addBreadcrumb({
+				category: 'clan',
+				message: `${logPrefix} Member kicked successfully`,
+				level: 'info',
+				data: { ...tags, targetMemberId: memberToKick.id },
+			});
+		} catch (error) {
+			Sentry.addBreadcrumb({
+				category: 'clan',
+				message: `${logPrefix} Error during clan kick`,
+				level: 'error',
+				data: { ...tags, targetMemberId: memberToKick.id, error: String(error) },
+			});
+			Sentry.withScope((scope) => {
+				scope.setTags({ ...tags, targetMemberId: memberToKick.id, customRoleId: customRoleId ?? 'unknown' });
+				scope.setTag('operation', 'clanKick');
+				Sentry.captureException(error);
+			});
+
+			await interaction.editReply({
+				embeds: [createErrorEmbed('An error occurred while kicking the member. Please try again.')],
+			});
+		}
 	}
 
 	public async toggleClaimSubcommand(interaction: Subcommand.ChatInputCommandInteraction<'cached'>) {
@@ -587,9 +657,26 @@ export class ClanCommand extends Subcommand {
 	}
 
 	public async leaveSubcommand(interaction: Subcommand.ChatInputCommandInteraction<'cached'>) {
+		const logPrefix = `[CLAN LEAVE @${interaction.user.id}]`;
+		const tags = { userId: interaction.user.id, guildId: interaction.guildId, channelId: interaction.channelId };
+
+		Sentry.addBreadcrumb({
+			category: 'clan',
+			message: `${logPrefix} User initiated /clan leave command`,
+			level: 'info',
+			data: tags,
+		});
+
 		await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
 		if (interaction.channel?.type !== ChannelType.GuildText) {
+			Sentry.addBreadcrumb({
+				category: 'clan',
+				message: `${logPrefix} Command rejected: not a text channel`,
+				level: 'warning',
+				data: { ...tags, channelType: interaction.channel?.type },
+			});
+
 			await interaction.editReply({
 				embeds: [createErrorEmbed('This command can only be used in a text channel.')],
 			});
@@ -600,6 +687,13 @@ export class ClanCommand extends Subcommand {
 		const clanManager = await ClanManager.fromChannel(interaction.channel);
 
 		if (!clanManager) {
+			Sentry.addBreadcrumb({
+				category: 'clan',
+				message: `${logPrefix} Command rejected: not a clan channel`,
+				level: 'warning',
+				data: tags,
+			});
+
 			await interaction.editReply({
 				embeds: [createErrorEmbed('This channel is not a clan channel.')],
 			});
@@ -609,8 +703,23 @@ export class ClanCommand extends Subcommand {
 
 		const customRole = await clanManager.getCustomRole();
 		const clanOwnerId = clanManager.getClanOwnerId();
+		const customRoleId = await clanManager.getCustomRoleId();
+
+		Sentry.addBreadcrumb({
+			category: 'clan',
+			message: `${logPrefix} Found clan in channel`,
+			level: 'info',
+			data: { ...tags, clanOwnerId, customRoleId, customRoleName: customRole?.name },
+		});
 
 		if (clanOwnerId === interaction.user.id) {
+			Sentry.addBreadcrumb({
+				category: 'clan',
+				message: `${logPrefix} Command rejected: user is the clan owner`,
+				level: 'warning',
+				data: tags,
+			});
+
 			const clanCommandId = interaction.client.application.commands.cache.find(
 				(command) => command.name === 'clan',
 			)?.id;
@@ -639,6 +748,13 @@ export class ClanCommand extends Subcommand {
 		const newInteraction = context as MessageComponentInteraction;
 
 		if (!confirmed) {
+			Sentry.addBreadcrumb({
+				category: 'clan',
+				message: `${logPrefix} User cancelled leaving clan`,
+				level: 'info',
+				data: tags,
+			});
+
 			await newInteraction.editReply({
 				content: '',
 				embeds: [createInfoEmbed('Cancelled leaving the clan.')],
@@ -648,17 +764,80 @@ export class ClanCommand extends Subcommand {
 			return;
 		}
 
-		await clanManager.removeMember(interaction.member);
-
-		await newInteraction.editReply({
-			content: '',
-			embeds: [
-				createInfoEmbed(
-					`# 🚪 You left the clan\nYou have been removed from the clan "${customRole!.name}" owned by <@${clanOwnerId}>.`,
-				),
-			],
-			components: [],
+		Sentry.addBreadcrumb({
+			category: 'clan',
+			message: `${logPrefix} User confirmed leaving clan, starting removal`,
+			level: 'info',
+			data: { ...tags, clanOwnerId, customRoleId },
 		});
+
+		try {
+			const removeStatus = await clanManager.removeMember(interaction.member);
+
+			Sentry.addBreadcrumb({
+				category: 'clan',
+				message: `${logPrefix} removeMember completed`,
+				level: 'info',
+				data: { ...tags, removeStatus, removeStatusName: ClanMemberRemoveStatus[removeStatus] },
+			});
+
+			if (removeStatus !== ClanMemberRemoveStatus.Removed) {
+				Sentry.addBreadcrumb({
+					category: 'clan',
+					message: `${logPrefix} removeMember returned non-success status`,
+					level: 'warning',
+					data: { ...tags, removeStatus, removeStatusName: ClanMemberRemoveStatus[removeStatus] },
+				});
+				Sentry.withScope((scope) => {
+					scope.setTags({ ...tags, customRoleId: customRoleId ?? 'unknown' });
+					scope.setTag('operation', 'clanLeave');
+					scope.setExtra('removeStatus', removeStatus);
+					scope.setExtra('removeStatusName', ClanMemberRemoveStatus[removeStatus]);
+					Sentry.captureMessage(
+						`${logPrefix} Clan leave returned unexpected status: ${ClanMemberRemoveStatus[removeStatus]}`,
+						'warning',
+					);
+				});
+			}
+
+			await newInteraction.editReply({
+				content: '',
+				embeds: [
+					createInfoEmbed(
+						`# 🚪 You left the clan\nYou have been removed from the clan "${customRole!.name}" owned by <@${clanOwnerId}>.`,
+					),
+				],
+				components: [],
+			});
+
+			Sentry.addBreadcrumb({
+				category: 'clan',
+				message: `${logPrefix} Clan leave completed successfully`,
+				level: 'info',
+				data: tags,
+			});
+		} catch (error) {
+			Sentry.addBreadcrumb({
+				category: 'clan',
+				message: `${logPrefix} Error during clan leave`,
+				level: 'error',
+				data: { ...tags, error: String(error) },
+			});
+			Sentry.withScope((scope) => {
+				scope.setTags({ ...tags, customRoleId: customRoleId ?? 'unknown' });
+				scope.setTag('operation', 'clanLeave');
+				scope.setExtra('clanOwnerId', clanOwnerId);
+				Sentry.captureException(error);
+			});
+
+			await newInteraction.editReply({
+				content: '',
+				embeds: [
+					createErrorEmbed('An error occurred while leaving the clan. Please try again or contact support.'),
+				],
+				components: [],
+			});
+		}
 	}
 
 	public async claimRoleSubcommand(interaction: Subcommand.ChatInputCommandInteraction<'cached'>) {

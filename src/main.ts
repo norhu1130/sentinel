@@ -1,13 +1,35 @@
-import '@sapphire/plugin-logger/register';
-
 import process from 'node:process';
 import { inspect } from 'node:util';
+import '@sapphire/plugin-logger/register';
 import { ApplicationCommandRegistries, LogLevel, RegisterBehavior } from '@sapphire/framework';
 import { Time } from '@sapphire/time-utilities';
+import * as Sentry from '@sentry/node';
 import { createColors } from 'colorette';
 import { GuildMember, type User } from 'discord.js';
 import { ActivityType, IntentsBitField, Options, Partials } from 'discord.js';
 import { UtilsBot } from './lib/UtilsBot.js';
+
+if (process.env.SENTRY_DSN) {
+	Sentry.init({
+		dsn: process.env.SENTRY_DSN,
+		environment: process.env.NODE_ENV ?? 'development',
+		tracesSampleRate: 0,
+	});
+}
+
+process.on('uncaughtException', (error) => {
+	console.error('Uncaught Exception:', error);
+	Sentry.captureException(error);
+});
+
+process.on('unhandledRejection', (reason) => {
+	console.error('Unhandled Rejection:', reason);
+	if (reason instanceof Error) {
+		Sentry.captureException(reason);
+	} else {
+		Sentry.captureMessage(String(reason), 'error');
+	}
+});
 
 ApplicationCommandRegistries.setDefaultBehaviorWhenNotIdentical(RegisterBehavior.Overwrite);
 
@@ -84,5 +106,6 @@ try {
 	await client.login();
 } catch (error) {
 	client.logger.error(colorette.red('Failed to launch the bot:'), error);
+	Sentry.captureException(error);
 	await client.destroy();
 }

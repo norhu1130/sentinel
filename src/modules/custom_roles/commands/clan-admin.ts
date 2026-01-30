@@ -75,7 +75,7 @@ export class ClanAdminCommand extends Subcommand {
 		}
 
 		let clanManager: ClanManager;
-		let premiumMember: { userId: string; customRoleId: string | null } | null = null;
+		let premiumMember: { customRoleId: string | null; userId: string } | null = null;
 
 		if (user) {
 			// Look up the clan by user (owner)
@@ -84,9 +84,7 @@ export class ClanAdminCommand extends Subcommand {
 			});
 
 			if (!premiumMember?.customRoleId) {
-				await this.replyWithComponents(interaction, [
-					this.errorMessage('This user does not own a clan.'),
-				]);
+				await this.replyWithComponents(interaction, [this.errorMessage('This user does not own a clan.')]);
 				return;
 			}
 
@@ -99,7 +97,9 @@ export class ClanAdminCommand extends Subcommand {
 
 		if (!clan) {
 			await this.replyWithComponents(interaction, [
-				this.errorMessage(user ? 'This user does not own a clan.' : 'This role does not have an associated clan.'),
+				this.errorMessage(
+					user ? 'This user does not own a clan.' : 'This role does not have an associated clan.',
+				),
 			]);
 			return;
 		}
@@ -122,9 +122,7 @@ export class ClanAdminCommand extends Subcommand {
 
 		const container = new ContainerBuilder()
 			.setAccentColor(customRole?.color ?? Colors.Info)
-			.addTextDisplayComponents(
-				new TextDisplayBuilder().setContent(`# ${customRole?.name ?? 'Unknown Clan'}`),
-			)
+			.addTextDisplayComponents(new TextDisplayBuilder().setContent(`# ${customRole?.name ?? 'Unknown Clan'}`))
 			.addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small))
 			.addTextDisplayComponents(
 				new TextDisplayBuilder().setContent(
@@ -140,16 +138,16 @@ export class ClanAdminCommand extends Subcommand {
 					`**Visibility:** ${clan.isVisibleInDirectory ? 'Public' : 'Private'}\n` +
 						`**Role Claimable:** ${clan.isRoleClaimable ? 'Yes' : 'No'}\n` +
 						`**Status:** ${clan.deletionTaskId ? '⚠️ Scheduled for deletion' : '✅ Active'}` +
-						(roleCreatedAt ? `\n**Role Created:** ${time(roleCreatedAt, TimestampStyles.RelativeTime)}` : ''),
+						(roleCreatedAt ?
+							`\n**Role Created:** ${time(roleCreatedAt, TimestampStyles.RelativeTime)}`
+						:	''),
 				),
 			);
 
 		if (clan.description) {
 			container
 				.addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small))
-				.addTextDisplayComponents(
-					new TextDisplayBuilder().setContent(`**Description:**\n${clan.description}`),
-				);
+				.addTextDisplayComponents(new TextDisplayBuilder().setContent(`**Description:**\n${clan.description}`));
 		}
 
 		await this.replyWithComponents(interaction, [container], { parse: [] });
@@ -191,19 +189,13 @@ export class ClanAdminCommand extends Subcommand {
 
 		const container = new ContainerBuilder()
 			.setAccentColor(Colors.Info)
-			.addTextDisplayComponents(
-				new TextDisplayBuilder().setContent(`## Clans for ${user.username}`),
-			)
+			.addTextDisplayComponents(new TextDisplayBuilder().setContent(`## Clans for ${user.username}`))
 			.addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small))
-			.addTextDisplayComponents(
-				new TextDisplayBuilder().setContent(clanLines.join('\n')),
-			);
+			.addTextDisplayComponents(new TextDisplayBuilder().setContent(clanLines.join('\n')));
 
 		if (ownedClan?.customRoleId) {
 			container.addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small));
-			container.addTextDisplayComponents(
-				new TextDisplayBuilder().setContent('👑 = Clan owner'),
-			);
+			container.addTextDisplayComponents(new TextDisplayBuilder().setContent('👑 = Clan owner'));
 		}
 
 		await this.replyWithComponents(interaction, [container]);
@@ -265,9 +257,7 @@ export class ClanAdminCommand extends Subcommand {
 		}
 
 		await this.replyWithComponents(interaction, [
-			this.successMessage(
-				`Removed **${memberToRemove.user.username}** from the clan **${clanRole.name}**.`,
-			),
+			this.successMessage(`Removed **${memberToRemove.user.username}** from the clan **${clanRole.name}**.`),
 		]);
 	}
 
@@ -334,9 +324,7 @@ export class ClanAdminCommand extends Subcommand {
 
 		const container = new ContainerBuilder()
 			.setAccentColor(Colors.Error)
-			.addTextDisplayComponents(
-				new TextDisplayBuilder().setContent(`## Delete Clan: ${clanRole.name}`),
-			)
+			.addTextDisplayComponents(new TextDisplayBuilder().setContent(`## Delete Clan: ${clanRole.name}`))
 			.addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small))
 			.addTextDisplayComponents(
 				new TextDisplayBuilder().setContent(
@@ -354,7 +342,7 @@ export class ClanAdminCommand extends Subcommand {
 
 		try {
 			const buttonInteraction = await response.awaitMessageComponent({
-				filter: (i) => i.user.id === interaction.user.id,
+				filter: (bi) => bi.user.id === interaction.user.id,
 				time: 30_000,
 			});
 
@@ -482,9 +470,7 @@ export class ClanAdminCommand extends Subcommand {
 						.addRoleOption((option) =>
 							option.setName('clan').setDescription('The clan role to get info about'),
 						)
-						.addUserOption((option) =>
-							option.setName('user').setDescription('The user who owns the clan'),
-						),
+						.addUserOption((option) => option.setName('user').setDescription('The user who owns the clan')),
 				)
 				.addSubcommand((subcommand) =>
 					subcommand

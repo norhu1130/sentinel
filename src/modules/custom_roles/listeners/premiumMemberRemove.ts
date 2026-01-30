@@ -1,5 +1,6 @@
 import { ApplyOptions } from '@sapphire/decorators';
 import { Events, Listener } from '@sapphire/framework';
+import * as Sentry from '@sentry/node';
 import type { GuildMember } from 'discord.js';
 import { ClanManager } from '../../../lib/abilities/ClanManager.js';
 import { ensureFullMember } from '../../../lib/utils.js';
@@ -8,6 +9,16 @@ import { ensureFullMember } from '../../../lib/utils.js';
 export class GuildMemberRemove extends Listener<typeof Events.GuildMemberRemove> {
 	public override async run(member: GuildMember) {
 		await ensureFullMember(member);
+
+		const logPrefix = `[PREMIUM @${member.id}]`;
+		const tags = { userId: member.id, guildId: member.guild.id };
+
+		Sentry.addBreadcrumb({
+			category: 'clan',
+			message: `${logPrefix} Member left server, starting cleanup`,
+			level: 'info',
+			data: { ...tags, memberTag: member.user.tag },
+		});
 
 		this.container.logger.info(`[PREMIUM] ${member.user.tag} left the server`, {
 			userId: member.id,
@@ -19,24 +30,130 @@ export class GuildMemberRemove extends Listener<typeof Events.GuildMemberRemove>
 		const customRoleId = await clanManager.getCustomRoleId();
 
 		if (clan) {
-			await clanManager.makeClanOrphan();
+			Sentry.addBreadcrumb({
+				category: 'clan',
+				message: `${logPrefix} Member owns a clan, making it orphan`,
+				level: 'info',
+				data: { ...tags, customRoleId: clan.customRoleId, channelId: clan.channelId },
+			});
+
+			try {
+				await clanManager.makeClanOrphan();
+				Sentry.addBreadcrumb({
+					category: 'clan',
+					message: `${logPrefix} Clan marked as orphan successfully`,
+					level: 'info',
+					data: tags,
+				});
+			} catch (error) {
+				Sentry.addBreadcrumb({
+					category: 'clan',
+					message: `${logPrefix} Failed to make clan orphan`,
+					level: 'error',
+					data: { ...tags, error: String(error) },
+				});
+				Sentry.withScope((scope) => {
+					scope.setTags(tags);
+					scope.setTag('operation', 'premiumMemberRemove');
+					scope.setExtra('context', 'makeClanOrphan failed');
+					Sentry.captureException(error);
+				});
+			}
 		} else {
 			const premiumMember = await this.container.prisma.premiumMember.findFirst({
 				where: { guildId: member.guild.id, userId: member.id },
 			});
 
 			if (premiumMember) {
-				await ClanManager.deletePremiumRole(premiumMember);
-				await ClanManager.deleteGiftedRole(premiumMember);
+				Sentry.addBreadcrumb({
+					category: 'clan',
+					message: `${logPrefix} Member has premium but no clan, cleaning up roles`,
+					level: 'info',
+					data: {
+						...tags,
+						hasCustomRole: Boolean(premiumMember.customRoleId),
+						hasGiftedRole: Boolean(premiumMember.giftedRoleToUserId),
+					},
+				});
+
+				try {
+					await ClanManager.deletePremiumRole(premiumMember);
+				} catch (error) {
+					Sentry.addBreadcrumb({
+						category: 'clan',
+						message: `${logPrefix} Failed to delete premium role`,
+						level: 'error',
+						data: { ...tags, error: String(error) },
+					});
+					Sentry.withScope((scope) => {
+						scope.setTags(tags);
+						scope.setTag('operation', 'premiumMemberRemove');
+						scope.setExtra('context', 'deletePremiumRole failed');
+						Sentry.captureException(error);
+					});
+				}
+
+				try {
+					await ClanManager.deleteGiftedRole(premiumMember);
+				} catch (error) {
+					Sentry.addBreadcrumb({
+						category: 'clan',
+						message: `${logPrefix} Failed to delete gifted role`,
+						level: 'error',
+						data: { ...tags, error: String(error) },
+					});
+					Sentry.withScope((scope) => {
+						scope.setTags(tags);
+						scope.setTag('operation', 'premiumMemberRemove');
+						scope.setExtra('context', 'deleteGiftedRole failed');
+						Sentry.captureException(error);
+					});
+				}
 			}
 		}
 
-		await this.container.prisma.clanMember.deleteMany({
-			where: {
-				clanGuildId: member.guild.id,
-				userId: member.id,
-				clanCustomRoleId: { notIn: customRoleId ? [customRoleId] : [] },
-			},
+		Sentry.addBreadcrumb({
+			category: 'clan',
+			message: `${logPrefix} Cleaning up clan memberships`,
+			level: 'info',
+			data: tags,
+		});
+
+		try {
+			const deleteResult = await this.container.prisma.clanMember.deleteMany({
+				where: {
+					clanGuildId: member.guild.id,
+					userId: member.id,
+					...(customRoleId ? { clanCustomRoleId: { notIn: [customRoleId] } } : {}),
+				},
+			});
+
+			Sentry.addBreadcrumb({
+				category: 'clan',
+				message: `${logPrefix} Clan memberships cleaned up`,
+				level: 'info',
+				data: { ...tags, deletedCount: deleteResult.count },
+			});
+		} catch (error) {
+			Sentry.addBreadcrumb({
+				category: 'clan',
+				message: `${logPrefix} Failed to clean up clan memberships`,
+				level: 'error',
+				data: { ...tags, error: String(error) },
+			});
+			Sentry.withScope((scope) => {
+				scope.setTags(tags);
+				scope.setTag('operation', 'premiumMemberRemove');
+				scope.setExtra('context', 'clanMember deleteMany failed');
+				Sentry.captureException(error);
+			});
+		}
+
+		Sentry.addBreadcrumb({
+			category: 'clan',
+			message: `${logPrefix} Member removal processing completed`,
+			level: 'info',
+			data: tags,
 		});
 	}
 }
