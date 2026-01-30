@@ -1,6 +1,7 @@
 import { Result } from '@sapphire/framework';
 import { Time } from '@sapphire/time-utilities';
 import { Task } from '../lib/schedule/tasks/Task.js';
+import { DiscordAPIError } from 'discord.js';
 
 const header = '[INVITE PRUNE] ';
 
@@ -50,10 +51,12 @@ export class InvitePrune extends Task {
 							`Invite Prune: deleting invite that would expire eventually and that was made more than two hours ago`,
 						);
 					} catch (error) {
-						this.container.logger.warn(
-							`${header}  Failed to delete invite ${invite.code} for guild ${guild.name} (${guild.id})`,
-							error,
-						);
+						if (error instanceof DiscordAPIError && error.status && error.status !== 404) {
+							this.container.logger.warn(
+								`${header}  Failed to delete invite ${invite.code} for guild ${guild.name} (${guild.id})`,
+								error,
+							);
+						}
 					}
 				}
 			}
