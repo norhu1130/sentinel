@@ -1,3 +1,4 @@
+import { Duration } from '@sapphire/time-utilities';
 import * as Sentry from '@sentry/node';
 import { ClanManager } from '../lib/abilities/ClanManager.js';
 import { MemberAbilities } from '../lib/abilities/MemberAbilities.js';
@@ -544,7 +545,6 @@ export class CheckPremiumMemberAbilities extends Task {
 
 				if (isOrphaned) {
 					totalOrphanedClansWithoutTask++;
-					const guild = this.container.client.guilds.resolve(clan.guildId);
 
 					this.container.logger.warn(
 						`${LOG_PREFIX} [ORPHANED CLAN] Clan with custom role ${clan.customRoleId} in guild ${clan.guildId} ${orphanReason}`,
@@ -560,47 +560,51 @@ export class CheckPremiumMemberAbilities extends Task {
 						reason: orphanReason,
 					});
 
-					// Delete orphaned clan immediately if fix mode allows
-					if ((fixMode === 'fix-all' || fixMode === 'fix-missing') && guild) {
+					// Schedule orphaned clan for deletion with a grace period
+					if (fixMode === 'fix-all' || fixMode === 'fix-missing') {
 						try {
-							addBreadcrumb('Deleting orphaned clan', { customRoleId: clan.customRoleId });
-							const clanManager = new ClanManager(clan.customRoleId, clan.guildId);
-							await clanManager.deleteClan();
-							addBreadcrumb('Orphaned clan deleted', { customRoleId: clan.customRoleId });
-
-							// Also delete the custom role from Discord
-							addBreadcrumb('Fetching custom role for orphaned clan', {
+							addBreadcrumb('Scheduling orphaned clan for deletion', {
 								customRoleId: clan.customRoleId,
 							});
-							const role = await guild.roles.fetch(clan.customRoleId).catch(() => null);
-							if (role) {
-								addBreadcrumb('Deleting custom role for orphaned clan', {
-									customRoleId: clan.customRoleId,
-									roleName: role.name,
-								});
-								await role.delete('Orphaned clan cleanup');
-								addBreadcrumb('Custom role deleted', { customRoleId: clan.customRoleId });
-							}
+
+							const deletionDate = new Duration('1 week').fromNow;
+							const deletionTask = await this.container.client.schedule.add(
+								'deleteOrphanClan',
+								deletionDate,
+								JSON.stringify({ customRoleId: clan.customRoleId, guildId: clan.guildId }),
+							);
+
+							await this.container.prisma.clan.update({
+								where: {
+									guildId_customRoleId: {
+										guildId: clan.guildId,
+										customRoleId: clan.customRoleId,
+									},
+								},
+								data: { deletionTaskId: deletionTask.id },
+							});
 
 							orphanedClansFixed++;
 							this.container.logger.info(
-								`${LOG_PREFIX} [FIXED] Deleted orphaned clan with custom role ${clan.customRoleId} in guild ${guild.name} (${clan.guildId})`,
+								`${LOG_PREFIX} [FIXED] Scheduled orphaned clan ${clan.customRoleId} in guild ${clan.guildId} for deletion in 1 week (task ${deletionTask.id})`,
 							);
-							addBreadcrumb('Orphaned clan cleanup completed', {
+							addBreadcrumb('Orphaned clan scheduled for deletion', {
 								customRoleId: clan.customRoleId,
 								guildId: clan.guildId,
+								taskId: deletionTask.id,
+								deletionDate: deletionDate.toISOString(),
 							});
 						} catch (error) {
 							this.container.logger.error(
-								`${LOG_PREFIX} Failed to delete orphaned clan ${clan.customRoleId} in guild ${clan.guildId}:`,
+								`${LOG_PREFIX} Failed to schedule orphaned clan ${clan.customRoleId} in guild ${clan.guildId} for deletion:`,
 								error,
 							);
 							addBreadcrumb(
-								'Failed to delete orphaned clan',
+								'Failed to schedule orphaned clan for deletion',
 								{ customRoleId: clan.customRoleId, error: String(error) },
 								'error',
 							);
-							captureError(error as Error, 'checkAbilities: orphaned clan deletion failed', {
+							captureError(error as Error, 'checkAbilities: orphaned clan scheduling failed', {
 								customRoleId: clan.customRoleId,
 								guildId: clan.guildId,
 							});
@@ -626,7 +630,7 @@ export class CheckPremiumMemberAbilities extends Task {
 
 		addBreadcrumb('Clan iteration completed', { totalOrphanedClansWithoutTask, orphanedClansFixed });
 
-		const summary = `Checked ${totalChecked} members, found ${totalMismatches} mismatches, ${totalMissing} missing${totalOrphanedClansWithoutTask > 0 ? `, ${totalOrphanedClansWithoutTask} orphaned clans` : ''}${fixMode === 'dry-run' ? '' : `, fixed ${fixed} members and ${orphanedClansFixed} orphaned clans`}.`;
+		const summary = `Checked ${totalChecked} members, found ${totalMismatches} mismatches, ${totalMissing} missing${totalOrphanedClansWithoutTask > 0 ? `, ${totalOrphanedClansWithoutTask} orphaned clans` : ''}${fixMode === 'dry-run' ? '' : `, fixed ${fixed} members and scheduled ${orphanedClansFixed} orphaned clans for deletion`}.`;
 
 		this.container.logger.info(`${LOG_PREFIX} Completed. ${summary}`);
 		addBreadcrumb('checkAbilities completed', {

@@ -4,10 +4,10 @@ import { Task, type TaskRunData } from '../lib/schedule/tasks/Task.js';
 
 export class DeleteOrphanClan extends Task {
 	public async run(data: TaskRunData) {
-		const { guildId, userId } = JSON.parse(data.data!) as { guildId: string; userId: string };
+		const { guildId, customRoleId } = JSON.parse(data.data!) as { customRoleId: string; guildId: string };
 
-		const logPrefix = `[ORPHAN CLAN @${userId}]`;
-		const tags = { userId, guildId, taskId: String(data.id) };
+		const logPrefix = `[ORPHAN CLAN @&${customRoleId}]`;
+		const tags = { customRoleId, guildId, taskId: String(data.id) };
 
 		Sentry.addBreadcrumb({
 			category: 'clan',
@@ -19,7 +19,7 @@ export class DeleteOrphanClan extends Task {
 		this.container.logger.info(`${logPrefix} Executing scheduled orphan clan deletion`);
 
 		try {
-			await new ClanManager(userId, guildId).deleteOrphanClan();
+			await new ClanManager(customRoleId, guildId).deleteOrphanClan();
 
 			Sentry.addBreadcrumb({
 				category: 'clan',

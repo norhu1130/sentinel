@@ -664,7 +664,7 @@ export class ClanManager {
 			const deletionTask = await container.client.schedule.add(
 				'deleteOrphanClan',
 				deletionDate,
-				JSON.stringify({ userId: this.userId, guildId: this.guildId }),
+				JSON.stringify({ customRoleId: clan.customRoleId, guildId: this.guildId }),
 			);
 
 			this.addBreadcrumb('Updating clan with deletion task ID', { taskId: deletionTask.id });
@@ -758,13 +758,6 @@ export class ClanManager {
 
 		const clan = await this.getClan();
 
-		if (!this.getClanOwnerId()) {
-			this.logError(`Could not delete orphan clan: no owner id found`);
-			this.addBreadcrumb('deleteOrphanClan failed: no owner id', undefined, 'error');
-			this.captureWarning('Could not delete orphan clan: no owner id found');
-			return;
-		}
-
 		if (!clan?.deletionTaskId) {
 			const reason = clan ? 'deletion task id' : 'clan';
 			this.logError(`Could not delete orphan clan: no ${reason} found`);
@@ -814,18 +807,21 @@ export class ClanManager {
 			}
 		}
 
-		try {
-			this.addBreadcrumb('Cleaning up remaining clan member entries');
-			await container.prisma.clanMember.deleteMany({
-				where: { clanGuildId: this.guildId, userId: this.userId },
-			});
-			this.addBreadcrumb('Clan member entries cleaned up');
-		} catch (error) {
-			this.addBreadcrumb('Failed to clean up clan member entries', { error: String(error) }, 'error');
-			this.captureError(error as Error, 'deleteOrphanClan: clanMember cleanup failed');
+		if (this.userId) {
+			try {
+				this.addBreadcrumb('Cleaning up remaining clan member entries');
+				await container.prisma.clanMember.deleteMany({
+					where: { clanGuildId: this.guildId, userId: this.userId },
+				});
+				this.addBreadcrumb('Clan member entries cleaned up');
+			} catch (error) {
+				this.addBreadcrumb('Failed to clean up clan member entries', { error: String(error) }, 'error');
+				this.captureError(error as Error, 'deleteOrphanClan: clanMember cleanup failed');
+			}
+
+			this.log(`Removed every clan member after clan deletion`);
 		}
 
-		this.log(`Removed every clan member after clan deletion`);
 		this.addBreadcrumb('deleteOrphanClan completed');
 	}
 

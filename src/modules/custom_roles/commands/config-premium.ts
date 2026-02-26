@@ -1029,7 +1029,7 @@ export class ConfigPremiumCommand extends Subcommand {
 		} else {
 			description.push(`🔧 Fixed members: ${result.fixed}`);
 			if (result.orphanedClansFixed > 0) {
-				description.push(`🔧 Fixed orphaned clans: ${result.orphanedClansFixed}`);
+				description.push(`🔧 Orphaned clans scheduled for deletion: ${result.orphanedClansFixed}`);
 			}
 
 			description.push('');
@@ -1038,7 +1038,7 @@ export class ConfigPremiumCommand extends Subcommand {
 				: fixMode === 'fix-missing' ? 'missing members'
 				: 'mismatches';
 			description.push(
-				`*Removed ${result.fixed} premium member entries and ${result.orphanedClansFixed} orphaned clans from the database (${fixedWhat}).*`,
+				`*Removed ${result.fixed} premium member entries and scheduled ${result.orphanedClansFixed} orphaned clans for deletion (${fixedWhat}).*`,
 			);
 		}
 
