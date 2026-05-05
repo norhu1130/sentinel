@@ -124,9 +124,13 @@ export class UpdateClanDirectory extends Task {
 				fieldCount += 2;
 			}
 
+			const subscriptionsLink =
+				guildId === '828370043867496531' ?
+					'https://discord.com/channels/828370043867496531/1498247912847704184'
+				:	`https://discord.com/channels/679875946597056683/1501146890832449567`;
 			const footerField = {
 				name: ' ',
-				value: `-# Request to join a clan with \`/clan join\`. \n-# Want to create a clan? Check out our [**server subscriptions! **](https://discord.com/channels/679875946597056683/shop)(desktop only)`,
+				value: `-# Request to join a clan with \`/clan join\`. \n-# Want to create a clan? Check out our [**server subscriptions! **](${subscriptionsLink})(desktop only)`,
 				inline: false,
 			};
 
