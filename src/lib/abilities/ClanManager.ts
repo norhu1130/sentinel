@@ -1379,14 +1379,18 @@ export class ClanManager {
 	}
 
 	private async giveOwnerPermissions(channel: TextChannel, ownerId: string): Promise<NonThreadGuildBasedChannel> {
-		return channel.permissionOverwrites.edit(ownerId, {
-			ViewChannel: true,
-			ManageChannels: true,
-			ManageMessages: true,
-			PinMessages: true,
-			CreatePrivateThreads: true,
-			MentionEveryone: true,
-		});
+		return channel.permissionOverwrites.edit(
+			ownerId,
+			{
+				ViewChannel: true,
+				ManageChannels: true,
+				ManageMessages: true,
+				PinMessages: true,
+				CreatePrivateThreads: true,
+				MentionEveryone: true,
+			},
+			{ type: OverwriteType.Member },
+		);
 	}
 
 	public async editChannelPermission(
