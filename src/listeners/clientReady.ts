@@ -53,8 +53,16 @@ export class ClientReadyEvent extends Listener {
 				await client.schedule.add('UpdateClanDirectory', '*/5 * * * *');
 			}
 
-			if (!client.schedule.queue.some((task) => task.taskID === 'checkPremiumMemberAbilities')) {
-				await client.schedule.add('checkPremiumMemberAbilities', '0 10 * * *');
+			const premiumAbilityCheckData = JSON.stringify({ fixMode: 'fix-all' });
+			const existingPremiumAbilityCheck = client.schedule.queue.find(
+				(task) => task.taskID === 'checkPremiumMemberAbilities',
+			);
+
+			if (!existingPremiumAbilityCheck) {
+				await client.schedule.add('checkPremiumMemberAbilities', '0 10 * * *', premiumAbilityCheckData);
+			} else if (existingPremiumAbilityCheck.data !== premiumAbilityCheckData) {
+				await client.schedule.remove(existingPremiumAbilityCheck);
+				await client.schedule.add('checkPremiumMemberAbilities', '0 10 * * *', premiumAbilityCheckData);
 			}
 		} catch (error) {
 			client.emit('wtf', error);
