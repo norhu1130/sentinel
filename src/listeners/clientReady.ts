@@ -5,6 +5,7 @@ import { cyanBright, green, magenta } from 'colorette';
 import { OAuth2Scopes, PermissionFlagsBits } from 'discord-api-types/v10';
 import { loadMediaOnlyChannels } from '../lib/utils/caches/mediaOnlyCache.js';
 import { LogPrefix } from '../lib/utils/logPrefix.js';
+import { loadCustomCommands } from '../modules/custom_commands/customCommandCache.js';
 
 declare module 'discord.js' {
 	interface ClientEvents {
@@ -53,6 +54,10 @@ export class ClientReadyEvent extends Listener {
 				await client.schedule.add('UpdateClanDirectory', '*/5 * * * *');
 			}
 
+			if (!client.schedule.queue.some((task) => task.taskID === 'cleanupCustomCommandUsage')) {
+				await client.schedule.add('cleanupCustomCommandUsage', '0 4 * * *');
+			}
+
 			const premiumAbilityCheckData = JSON.stringify({ fixMode: 'fix-all' });
 			const existingPremiumAbilityCheck = client.schedule.queue.find(
 				(task) => task.taskID === 'checkPremiumMemberAbilities',
@@ -69,6 +74,7 @@ export class ClientReadyEvent extends Listener {
 		}
 
 		await loadMediaOnlyChannels();
+		await loadCustomCommands();
 
 		// Fetch all members for all guilds once, then emit event for other listeners
 		const guilds = [...client.guilds.cache.values()];

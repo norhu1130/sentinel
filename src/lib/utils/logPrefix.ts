@@ -99,6 +99,7 @@ export const LogPrefix = {
 	PREMIUM: colorize('[PREMIUM]'),
 	PREMIUM_ABILITY_CHECK: colorize('[PREMIUM ABILITY CHECK]'),
 	CUSTOM_ROLE: colorize('[CUSTOM ROLE]'),
+	CUSTOM_COMMAND: colorize('[CUSTOM COMMAND]'),
 	CLAN: colorize('[CLAN]'),
 	CLAN_DIRECTORY: colorize('[CLAN DIRECTORY]'),
 	CLAN_JOIN_REQUEST: colorize('[CLAN JOIN REQUEST]'),

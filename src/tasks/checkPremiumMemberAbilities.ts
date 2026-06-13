@@ -203,7 +203,11 @@ export class CheckPremiumMemberAbilities extends Task {
 
 		// Remove the gifted Legend role (if any) before the DB row tracking it disappears
 		if (premiumMember.giftedRoleToUserId) {
-			addBreadcrumb('Removing gifted Legend role', { guildId, userId, giftedToUserId: premiumMember.giftedRoleToUserId });
+			addBreadcrumb('Removing gifted Legend role', {
+				guildId,
+				userId,
+				giftedToUserId: premiumMember.giftedRoleToUserId,
+			});
 			try {
 				await ClanManager.deleteGiftedRole(premiumMember);
 				addBreadcrumb('Gifted Legend role removed', { guildId, userId });
@@ -212,7 +216,11 @@ export class CheckPremiumMemberAbilities extends Task {
 					`${LOG_PREFIX} [CLEANUP] Failed to remove gifted Legend role for ${reason} user ${userId}:`,
 					error,
 				);
-				addBreadcrumb('Failed to remove gifted Legend role', { error: String(error), guildId, userId }, 'error');
+				addBreadcrumb(
+					'Failed to remove gifted Legend role',
+					{ error: String(error), guildId, userId },
+					'error',
+				);
 				captureError(error as Error, 'cleanupPremiumMember: deleteGiftedRole failed', {
 					guildId,
 					userId,

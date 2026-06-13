@@ -17,6 +17,7 @@ export class MemberAbilities {
 		areAbilitiesMultiGuild: false,
 		canUploadCustomEmoji: false,
 		canPickSubscriberRole: false,
+		canCreateCustomCommand: false,
 	};
 
 	public constructor(member: GuildMember) {
@@ -53,6 +54,9 @@ export class MemberAbilities {
 			.some(hasRole);
 		this.abilities.canPickSubscriberRole = this.roleAbilities
 			.getPremiumRoleIds('canPickSubscriberRole')
+			.some(hasRole);
+		this.abilities.canCreateCustomCommand = this.roleAbilities
+			.getPremiumRoleIds('canCreateCustomCommand')
 			.some(hasRole);
 
 		this.abilitiesComputed = true;

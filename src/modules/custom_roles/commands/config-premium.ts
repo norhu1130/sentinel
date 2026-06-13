@@ -66,6 +66,11 @@ export class ConfigPremiumCommand extends Subcommand {
 			chatInputRun: 'setPositionRoleSubcommand',
 		},
 		{
+			type: 'method',
+			name: 'set-custom-command-input-mode',
+			chatInputRun: 'setCustomCommandInputModeSubcommand',
+		},
+		{
 			type: 'group',
 			name: 'staff-roles',
 			entries: [
@@ -174,6 +179,10 @@ export class ConfigPremiumCommand extends Subcommand {
 			{
 				name: 'Clan Invite Channel',
 				value: clanInviteChannel ? `<#${clanInviteChannel.id}> (${clanInviteChannel.id})` : null,
+			},
+			{
+				name: 'Custom Command Input Mode',
+				value: premiumConfig?.customCommandInputMode ?? 'upload',
 			},
 		];
 
@@ -545,6 +554,21 @@ export class ConfigPremiumCommand extends Subcommand {
 		});
 	}
 
+	public async setCustomCommandInputModeSubcommand(interaction: Subcommand.ChatInputCommandInteraction<'cached'>) {
+		const mode = interaction.options.getString('mode', true);
+
+		await this.container.prisma.premiumGuildRoleConfig.upsert({
+			where: { guildId: interaction.guildId },
+			create: { guildId: interaction.guildId, staffRoles: [], customCommandInputMode: mode },
+			update: { customCommandInputMode: mode },
+		});
+
+		await interaction.reply({
+			embeds: [createInfoEmbed(`Set the custom command media input mode to \`${mode}\` in this server.`)],
+			flags: MessageFlags.Ephemeral,
+		});
+	}
+
 	public async listStaffRolesSubcommand(interaction: Subcommand.ChatInputCommandInteraction<'cached'>) {
 		const guildConfigs = await this.container.prisma.premiumGuildRoleConfig.findFirst({
 			where: { guildId: interaction.guildId },
@@ -796,6 +820,7 @@ export class ConfigPremiumCommand extends Subcommand {
 											},
 											{ name: 'Upload custom emojis', value: 'canUploadCustomEmoji' },
 											{ name: 'Pick subscriber roles', value: 'canPickSubscriberRole' },
+											{ name: 'Create custom commands', value: 'canCreateCustomCommand' },
 										)
 										.setRequired(true),
 								),
@@ -824,6 +849,7 @@ export class ConfigPremiumCommand extends Subcommand {
 											},
 											{ name: 'Upload custom emojis', value: 'canUploadCustomEmoji' },
 											{ name: 'Pick subscriber roles', value: 'canPickSubscriberRole' },
+											{ name: 'Create custom commands', value: 'canCreateCustomCommand' },
 										)
 										.setRequired(true),
 								),
@@ -839,6 +865,22 @@ export class ConfigPremiumCommand extends Subcommand {
 							role
 								.setName('role')
 								.setDescription('The position role (leave empty to reset/use the premium role)'),
+						),
+				)
+				.addSubcommand((subcommand) =>
+					subcommand
+						.setName('set-custom-command-input-mode')
+						.setDescription('Sets how clan owners may add media to custom commands in this server')
+						.addStringOption((option) =>
+							option
+								.setName('mode')
+								.setDescription('Allowed media input method for custom commands')
+								.addChoices(
+									{ name: 'File upload only', value: 'upload' },
+									{ name: 'URL only', value: 'url' },
+									{ name: 'Both upload and URL', value: 'both' },
+								)
+								.setRequired(true),
 						),
 				)
 				.addSubcommandGroup((role) =>
@@ -1190,9 +1232,7 @@ export class ConfigPremiumCommand extends Subcommand {
 
 		if (staleLooking.size === 0) {
 			await interaction.editReply({
-				embeds: [
-					createInfoEmbed('Every Legend role holder is covered by a gift entry - nothing to export.'),
-				],
+				embeds: [createInfoEmbed('Every Legend role holder is covered by a gift entry - nothing to export.')],
 			});
 			return;
 		}

@@ -227,6 +227,9 @@ model PremiumGuildRoleConfig {
   /// The role to use as starting position for the custom premium roles, with a fallback to the original premium role
   startingPositionRoleId String?
 
+  /// Which media input methods clan owners may use for custom commands: "upload" | "url" | "both"
+  customCommandInputMode String @default("upload")
+
   @@map("premium_guild_role_configs")
 }
 
@@ -262,6 +265,7 @@ model RoleAbilities {
   areAbilitiesMultiGuild Boolean @default(false)
   canUploadCustomEmoji   Boolean @default(false)
   canPickSubscriberRole  Boolean @default(false)
+  canCreateCustomCommand Boolean @default(false)
 
   @@id([guildId, roleId])
   @@map("role_abilities")
@@ -279,8 +283,48 @@ model Clan {
   description     String?
   isVisibleInDirectory Boolean      @default(true)
 
+  customCommands  CustomCommand[]
+
   @@id([guildId, customRoleId])
   @@map("clan")
+}
+
+model CustomCommand {
+  guildId          String
+  clanCustomRoleId String   // identifies the owning clan (Clan.customRoleId)
+  name             String   // normalized trigger, lowercase, without the prefix
+
+  text      String?
+  mediaData Bytes?   // upload mode: raw media bytes (bytea)
+  mediaUrl  String?  // url mode: external media url
+  mediaType String?  // MIME type, used when re-sending stored bytes
+  mediaName String?  // original filename, used when re-sending stored bytes
+
+  createdBy String   // owner userId at creation time (audit)
+  createdAt DateTime @default(now())
+
+  clan Clan @relation(fields: [guildId, clanCustomRoleId], references: [guildId, customRoleId], onDelete: Cascade)
+
+  @@id([guildId, clanCustomRoleId, name])
+  @@index([guildId, name])
+  @@map("custom_commands")
+}
+
+model CustomCommandUsage {
+  id               Int      @id @default(autoincrement())
+  guildId          String
+  clanCustomRoleId String
+  name             String   // the custom command name that was triggered
+
+  usedBy    String   // userId that triggered the command
+  channelId String
+  messageId String   // the bot's response message id (used by the "Show Command Info" context menu)
+  usedAt    DateTime @default(now())
+
+  @@index([messageId])
+  @@index([guildId, name])
+  @@index([usedAt])
+  @@map("custom_command_usage")
 }
 
 model ClanMember {
