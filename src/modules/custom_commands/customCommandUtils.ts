@@ -1,4 +1,5 @@
 import { Buffer } from 'node:buffer';
+import { setInterval } from 'node:timers';
 import type { Clan } from '@prisma/client';
 import { container } from '@sapphire/framework';
 import type { GuildMember } from 'discord.js';
@@ -44,7 +45,25 @@ export const ALLOWED_MEDIA_EXTENSIONS: Readonly<Record<string, string>> = {
 export const RATE_LIMIT_MAX = 3;
 export const RATE_LIMIT_WINDOW_MS = 5_000;
 
+/**
+ * How often expired rate-limit buckets are swept from memory. Without this, every unique
+ * (guild, user) pair that ever triggered a command would keep its bucket forever, leaking
+ * memory over the lifetime of the process.
+ */
+export const RATE_LIMIT_SWEEP_INTERVAL_MS = 60_000;
+
 const rateLimitBuckets = new Map<string, number[]>();
+
+// Drop buckets whose timestamps have all aged out. Active buckets keep getting trimmed on
+// access in isRateLimited; this only reclaims the ones for users who never come back.
+setInterval(() => {
+	const now = Date.now();
+	for (const [key, timestamps] of rateLimitBuckets) {
+		if (timestamps.every((timestamp) => now - timestamp >= RATE_LIMIT_WINDOW_MS)) {
+			rateLimitBuckets.delete(key);
+		}
+	}
+}, RATE_LIMIT_SWEEP_INTERVAL_MS).unref();
 
 /**
  * Sliding-window rate limiter for custom command triggers. Returns true when the caller has
