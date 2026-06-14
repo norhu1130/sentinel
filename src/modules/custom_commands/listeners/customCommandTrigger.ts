@@ -25,6 +25,10 @@ export class CustomCommandTrigger extends Listener {
 			return;
 		}
 
+		if (!message.channel.isSendable()) {
+			return;
+		}
+
 		// First token after the prefix, e.g. "!cat extra" -> "cat".
 		const firstToken = message.content.slice(CUSTOM_COMMAND_PREFIX.length).split(/\s+/, 1)[0] ?? '';
 		const name = normalizeCommandName(`${CUSTOM_COMMAND_PREFIX}${firstToken}`);
@@ -64,10 +68,6 @@ export class CustomCommandTrigger extends Listener {
 		});
 
 		if (!command) {
-			return;
-		}
-
-		if (!message.channel.isSendable()) {
 			return;
 		}
 
