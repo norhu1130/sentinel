@@ -17,6 +17,7 @@ import {
 	CUSTOM_COMMAND_PREFIX,
 	type CustomCommandInputMode,
 	fetchMediaBuffer,
+	findAutoModViolation,
 	getInputMode,
 	getOwnedClan,
 	isValidCommandName,
@@ -74,6 +75,10 @@ export class CustomCommandCommand extends Subcommand {
 			await interaction.editReply({
 				embeds: [createInfoEmbed('A command needs at least some text or a media attachment/URL.')],
 			});
+			return;
+		}
+
+		if (await this.replyIfAutoModViolation(interaction, name, text, media.value?.mediaUrl ?? null)) {
 			return;
 		}
 
@@ -183,6 +188,10 @@ export class CustomCommandCommand extends Subcommand {
 			await interaction.editReply({
 				embeds: [createInfoEmbed('A command needs at least some text or a media attachment/URL.')],
 			});
+			return;
+		}
+
+		if (await this.replyIfAutoModViolation(interaction, name, newText, newMedia.mediaUrl)) {
 			return;
 		}
 
@@ -423,6 +432,38 @@ export class CustomCommandCommand extends Subcommand {
 		}
 
 		return clan;
+	}
+
+	/**
+	 * Checks the command's name and reply content against the guild's keyword AutoMod rules. When a
+	 * rule would block it, replies with the reason and returns true so the caller can bail out;
+	 * returns false when the content is clean. Assumes the interaction is already deferred.
+	 */
+	private async replyIfAutoModViolation(
+		interaction: Subcommand.ChatInputCommandInteraction<'cached'>,
+		name: string,
+		text: string | null,
+		mediaUrl: string | null,
+	): Promise<boolean> {
+		const content = [name, text, mediaUrl].filter(Boolean).join('\n');
+		const violation = await findAutoModViolation(interaction.guild, content);
+
+		if (!violation) {
+			return false;
+		}
+
+		// Strip backticks so the matched text can't break out of the inline code span.
+		// const match = violation.match.replaceAll('`', '');
+
+		await interaction.editReply({
+			embeds: [
+				createInfoEmbed(
+					`That command can't be saved because it would be blocked by this server's AutoMod rule`// **${violation.ruleName}** (matched \`${match}\`).`,
+				),
+			],
+		});
+
+		return true;
 	}
 
 	/**

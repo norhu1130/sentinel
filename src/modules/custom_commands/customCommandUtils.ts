@@ -2,7 +2,7 @@ import { Buffer } from 'node:buffer';
 import { setInterval } from 'node:timers';
 import type { Clan } from '@prisma/client';
 import { container } from '@sapphire/framework';
-import type { GuildMember } from 'discord.js';
+import { AutoModerationRuleTriggerType, type Guild, type GuildMember } from 'discord.js';
 import { ClanManager } from '../../lib/abilities/ClanManager.js';
 import { LogPrefix } from '../../lib/utils/logPrefix.js';
 
@@ -161,4 +161,120 @@ export function isValidHttpUrl(value: string): boolean {
 	}
 
 	return url.protocol === 'http:' || url.protocol === 'https:';
+}
+
+/**
+ * Describes why a piece of content was rejected by an AutoMod rule.
+ */
+export interface AutoModViolation {
+	/**
+	 * The substring of the content that triggered the rule.
+	 */
+	match: string;
+	/**
+	 * The name of the AutoMod rule that matched.
+	 */
+	ruleName: string;
+}
+
+/**
+ * Escapes a string so it can be embedded literally inside a RegExp.
+ */
+function escapeRegex(value: string): string {
+	return value.replaceAll(/[$()*+.?[\\\]^{|}]/g, '\\$&');
+}
+
+/**
+ * Converts a single Discord AutoMod keyword-filter / allow-list entry into a RegExp, mirroring
+ * Discord's wildcard semantics:
+ *   - `word`   matches the whole word only (bounded by non-alphanumeric characters)
+ *   - `word*`  matches a word starting with `word` (prefix)
+ *   - `*word`  matches a word ending with `word` (suffix)
+ *   - `*word*` matches the substring anywhere
+ * Internal `*` are treated as "any characters". Matching is case-insensitive. Returns null for an
+ * entry that is empty once its wildcards are stripped.
+ */
+function keywordToRegex(keyword: string): RegExp | null {
+	const leadingWildcard = keyword.startsWith('*');
+	const trailingWildcard = keyword.endsWith('*');
+	const core = keyword.replace(/^\*+/, '').replace(/\*+$/, '');
+
+	if (!core) {
+		return null;
+	}
+
+	const body = core.split('*').map(escapeRegex).join('.*');
+	const left = leadingWildcard ? '' : '(?<![\\p{L}\\p{N}])';
+	const right = trailingWildcard ? '' : '(?![\\p{L}\\p{N}])';
+
+	try {
+		return new RegExp(`${left}${body}${right}`, 'iu');
+	} catch {
+		return null;
+	}
+}
+
+/**
+ * Checks `content` against the guild's enabled keyword-based AutoMod rules and returns the first
+ * violation found, or null when the content is clean.
+ *
+ * Only `Keyword` rules can be evaluated here: `KeywordPreset` rules rely on Discord's private word
+ * lists, and Spam / MentionSpam aren't content filters, so those are skipped. If the rules can't be
+ * fetched (e.g. the bot lacks Manage Server), this returns null rather than blocking creation — the
+ * live AutoMod still applies when the command is actually triggered as a backstop.
+ */
+export async function findAutoModViolation(guild: Guild, content: string): Promise<AutoModViolation | null> {
+	const trimmed = content.trim();
+
+	if (!trimmed) {
+		return null;
+	}
+
+	let rules;
+
+	try {
+		rules = await guild.autoModerationRules.fetch();
+	} catch (error) {
+		container.logger.warn(`${LogPrefix.CUSTOM_COMMAND} findAutoModViolation: failed to fetch rules`, {
+			guildId: guild.id,
+			error: String(error),
+		});
+		return null;
+	}
+
+	for (const rule of rules.values()) {
+		if (!rule.enabled || rule.triggerType !== AutoModerationRuleTriggerType.Keyword) {
+			continue;
+		}
+
+		const allowMatchers = (rule.triggerMetadata.allowList ?? [])
+			.map(keywordToRegex)
+			.filter((regex): regex is RegExp => regex !== null);
+
+		const matchers: RegExp[] = [];
+
+		for (const keyword of rule.triggerMetadata.keywordFilter ?? []) {
+			const regex = keywordToRegex(keyword);
+			if (regex) {
+				matchers.push(regex);
+			}
+		}
+
+		for (const pattern of rule.triggerMetadata.regexPatterns ?? []) {
+			try {
+				matchers.push(new RegExp(pattern, 'iu'));
+			} catch {
+				// skip patterns JS can't compile.
+			}
+		}
+
+		for (const regex of matchers) {
+			const found = regex.exec(trimmed);
+			if (found && !allowMatchers.some((allow) => allow.test(found[0]))) {
+				return { ruleName: rule.name, match: found[0] };
+			}
+		}
+	}
+
+	return null;
 }
