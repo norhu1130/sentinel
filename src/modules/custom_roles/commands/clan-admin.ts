@@ -1,18 +1,23 @@
+import type { Clan } from '@prisma/client';
 import { Subcommand, type SubcommandMappingArray } from '@sapphire/plugin-subcommands';
 import {
 	type ApplicationCommandOptionChoiceData,
 	type AutocompleteInteraction,
 	ButtonBuilder,
 	ButtonStyle,
+	ComponentType,
 	ContainerBuilder,
 	InteractionContextType,
+	type Message,
 	MessageFlags,
 	PermissionFlagsBits,
+	type Role,
 	SeparatorBuilder,
 	SeparatorSpacingSize,
 	TextDisplayBuilder,
 	time,
 	TimestampStyles,
+	UserSelectMenuBuilder,
 } from 'discord.js';
 import {
 	ClanDeletionStatus,
@@ -22,6 +27,7 @@ import {
 	ClanPermissionEditStatus,
 	ClanPermissionEditTarget,
 } from '../../../lib/abilities/ClanManager.js';
+import { LogPrefix } from '../../../lib/utils/logPrefix.js';
 
 const Colors = {
 	Success: 0x57f287,
@@ -122,6 +128,11 @@ export class ClanAdminCommand extends Subcommand {
 			});
 		}
 
+		const hasPremiumEntry = Boolean(premiumMember);
+		// A clan with no premium owner entry is unrecoverable on its own (the owner<->clan link is gone),
+		// so offer a manual restore as long as the Discord role still exists to reattach it to.
+		const isRestorable = !hasPremiumEntry && Boolean(customRole);
+
 		const ownerMention = premiumMember ? `<@${premiumMember.userId}>` : 'Unknown (orphaned)';
 		const channelMention = clanChannel ? `<#${clanChannel.id}>` : 'Not found';
 		const roleMention = customRole ? `<@&${customRole.id}>` : 'Not found';
@@ -144,7 +155,9 @@ export class ClanAdminCommand extends Subcommand {
 				new TextDisplayBuilder().setContent(
 					`**Visibility:** ${clan.isVisibleInDirectory ? 'Public' : 'Private'}\n` +
 						`**Role Claimable:** ${clan.isRoleClaimable ? 'Yes' : 'No'}\n` +
-						`**Status:** ${clan.deletionTaskId ? '⚠️ Scheduled for deletion' : '✅ Active'}` +
+						`**Status:** ${clan.deletionTaskId ? '⚠️ Scheduled for deletion' : '✅ Active'}\n` +
+						`**Clan DB entry:** ✅ Present\n` +
+						`**Premium entry:** ${hasPremiumEntry ? '✅ Present' : '❌ Missing'}` +
 						(roleCreatedAt ?
 							`\n**Role Created:** ${time(roleCreatedAt, TimestampStyles.RelativeTime)}`
 						:	''),
@@ -157,7 +170,192 @@ export class ClanAdminCommand extends Subcommand {
 				.addTextDisplayComponents(new TextDisplayBuilder().setContent(`**Description:**\n${clan.description}`));
 		}
 
-		await this.replyWithComponents(interaction, [container], { parse: [] });
+		if (isRestorable) {
+			container
+				.addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small))
+				.addTextDisplayComponents(
+					new TextDisplayBuilder().setContent(
+						'⚠️ This clan has **no premium owner entry**, so it cannot be restored automatically if the owner returns. Rebuild the link below.',
+					),
+				)
+				.addActionRowComponents((row) =>
+					row.addComponents(
+						new ButtonBuilder()
+							.setCustomId('clan-admin-restore')
+							.setLabel('Restore Clan')
+							.setStyle(ButtonStyle.Success),
+					),
+				);
+		}
+
+		const response = await this.replyWithComponents(interaction, [container], { parse: [] });
+
+		if (isRestorable && customRole) {
+			await this.runClanRestoreFlow(interaction, response, clan, customRole);
+		}
+	}
+
+	/**
+	 * Walks an admin through rebuilding the premium owner entry for an orphaned clan whose owner
+	 * link was lost (e.g. the premium member row was deleted). DB-only: assumes the clan role and
+	 * channel still exist; it recreates the PremiumMember row and un-orphans the clan.
+	 */
+	private async runClanRestoreFlow(
+		interaction: Subcommand.ChatInputCommandInteraction<'cached'>,
+		response: Message<true>,
+		clan: Clan,
+		customRole: Role,
+	): Promise<void> {
+		const { customRoleId } = clan;
+		const clanName = customRole.name;
+
+		let restoreClick;
+		try {
+			restoreClick = await response.awaitMessageComponent({
+				componentType: ComponentType.Button,
+				filter: (component) =>
+					component.user.id === interaction.user.id && component.customId === 'clan-admin-restore',
+				time: 60_000,
+			});
+		} catch {
+			// Admin never clicked Restore - leave the info message untouched.
+			return;
+		}
+
+		this.container.logger.info(
+			`${LogPrefix.PREMIUM} [RESTORE] Admin ${interaction.user.id} started restore for clan role ${customRoleId} in guild ${interaction.guildId}`,
+		);
+
+		const ownerSelect = new UserSelectMenuBuilder()
+			.setCustomId('clan-admin-restore-owner')
+			.setPlaceholder('Select the clan owner')
+			.setMinValues(1)
+			.setMaxValues(1);
+
+		await restoreClick.update({
+			components: [
+				new ContainerBuilder()
+					.setAccentColor(Colors.Info)
+					.addTextDisplayComponents(
+						new TextDisplayBuilder().setContent(
+							`## Restore Clan: ${clanName}\n\nSelect the member who should own this clan. This rebuilds the premium owner entry${
+								clan.deletionTaskId ? ' and cancels the scheduled deletion' : ''
+							}.`,
+						),
+					)
+					.addActionRowComponents((row) => row.addComponents(ownerSelect)),
+			],
+			flags: MessageFlags.IsComponentsV2,
+		});
+
+		let ownerSelectInteraction;
+		try {
+			ownerSelectInteraction = await response.awaitMessageComponent({
+				componentType: ComponentType.UserSelect,
+				filter: (component) =>
+					component.user.id === interaction.user.id && component.customId === 'clan-admin-restore-owner',
+				time: 60_000,
+			});
+		} catch {
+			this.container.logger.info(
+				`${LogPrefix.PREMIUM} [RESTORE] Restore for clan role ${customRoleId} timed out waiting for owner selection`,
+			);
+			await interaction.editReply({
+				components: [this.infoMessage('Clan restore timed out.')],
+				flags: MessageFlags.IsComponentsV2,
+			});
+			return;
+		}
+
+		const ownerId = ownerSelectInteraction.values[0];
+
+		await ownerSelectInteraction.update({
+			components: [this.infoMessage(`Restoring clan **${clanName}** for <@${ownerId}>...`)],
+			flags: MessageFlags.IsComponentsV2,
+		});
+
+		// Don't clobber a user who already owns a different custom role/clan.
+		const existingForUser = await this.container.prisma.premiumMember.findFirst({
+			where: { guildId: interaction.guildId, userId: ownerId },
+		});
+
+		if (existingForUser?.customRoleId && existingForUser.customRoleId !== customRoleId) {
+			this.container.logger.warn(
+				`${LogPrefix.PREMIUM} [RESTORE] Aborted: ${ownerId} already owns role ${existingForUser.customRoleId} in guild ${interaction.guildId}`,
+			);
+			await interaction.editReply({
+				components: [
+					this.errorMessage(
+						`<@${ownerId}> already owns another custom role (<@&${existingForUser.customRoleId}>). Restore aborted so it isn't overwritten.`,
+					),
+				],
+				flags: MessageFlags.IsComponentsV2,
+				allowedMentions: { parse: [] },
+			});
+			return;
+		}
+
+		// Don't hand a clan to someone new if it's somehow already owned.
+		const existingForClan = await this.container.prisma.premiumMember.findFirst({
+			where: { guildId: interaction.guildId, customRoleId },
+		});
+
+		if (existingForClan && existingForClan.userId !== ownerId) {
+			this.container.logger.warn(
+				`${LogPrefix.PREMIUM} [RESTORE] Aborted: clan role ${customRoleId} already owned by ${existingForClan.userId} in guild ${interaction.guildId}`,
+			);
+			await interaction.editReply({
+				components: [this.errorMessage(`This clan is already owned by <@${existingForClan.userId}>.`)],
+				flags: MessageFlags.IsComponentsV2,
+				allowedMentions: { parse: [] },
+			});
+			return;
+		}
+
+		try {
+			await this.container.prisma.premiumMember.upsert({
+				where: { guildId_userId: { guildId: interaction.guildId, userId: ownerId } },
+				create: { guildId: interaction.guildId, userId: ownerId, customRoleId },
+				update: { customRoleId },
+			});
+
+			this.container.logger.info(
+				`${LogPrefix.PREMIUM} [RESTORE] Recreated premium owner entry ${ownerId} -> role ${customRoleId} in guild ${interaction.guildId}`,
+			);
+
+			// makeClanNotOrphan resolves the owner from the (now restored) premium entry, cancels the
+			// scheduled deletion, re-adds the owner to the clan and restores their channel permissions.
+			const clanManager = new ClanManager(ownerId, interaction.guildId);
+			await clanManager.makeClanNotOrphan();
+
+			this.container.logger.info(
+				`${LogPrefix.PREMIUM} [RESTORE] Clan ${customRoleId} restored to owner ${ownerId} in guild ${interaction.guildId}`,
+			);
+		} catch (error) {
+			this.container.logger.error(
+				`${LogPrefix.PREMIUM} [RESTORE] Failed to restore clan ${customRoleId} for ${ownerId} in guild ${interaction.guildId}:`,
+				error,
+			);
+			await interaction.editReply({
+				components: [
+					this.errorMessage('Something went wrong while restoring the clan. Check the logs for details.'),
+				],
+				flags: MessageFlags.IsComponentsV2,
+			});
+			return;
+		}
+
+		await interaction.editReply({
+			components: [
+				this.successMessage(
+					`Restored the clan **${clanName}** and set <@${ownerId}> as the owner${
+						clan.deletionTaskId ? '. The scheduled deletion has been cancelled.' : '.'
+					}`,
+				),
+			],
+			flags: MessageFlags.IsComponentsV2,
+			allowedMentions: { parse: [] },
+		});
 	}
 
 	public async listSubcommand(interaction: Subcommand.ChatInputCommandInteraction<'cached'>) {

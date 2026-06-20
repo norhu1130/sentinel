@@ -8,6 +8,16 @@ import { LogPrefix } from '../lib/utils/logPrefix.js';
 
 export type FixMode = 'dry-run' | 'fix-all' | 'fix-mismatches' | 'fix-missing';
 
+/**
+ * What {@link CheckPremiumMemberAbilities.cleanupPremiumMember} actually did, so callers can keep
+ * their counters honest:
+ * - `deleted`: the premium member entry (and any standalone role/gift) was removed.
+ * - `orphaned`: the member owns a clan that had no grace period, so it was orphaned and the premium
+ *   entry was preserved.
+ * - `skipped`: nothing was changed (already orphaned, guild missing, or a transient error).
+ */
+type CleanupOutcome = 'deleted' | 'orphaned' | 'skipped';
+
 export interface CheckPremiumMemberAbilitiesOptions {
 	/**
 	 * What to fix: 'dry-run' (default), 'fix-missing', 'fix-mismatches', or 'fix-all'
@@ -93,27 +103,38 @@ export class CheckPremiumMemberAbilities extends Task {
 	}
 
 	/**
-	 * Cleans up a premium member who lost their abilities:
-	 * - Checks for clan and deletes it immediately if not already orphaned
-	 * - Deletes custom role from Discord
-	 * - Removes the gifted Legend role if they gifted one
-	 * - Deletes premium member entry from database
+	 * Cleans up a premium member who lost their abilities or left the server.
+	 *
+	 * A grace period only matters when there's a real clan to save, so:
+	 * - Owns a clan that's already orphaned: do nothing - let the grace period (or a manual restore)
+	 *   handle it, and keep the premium entry + gift intact.
+	 * - Owns a clan with no grace period yet (e.g. they left while the bot was offline, so the live
+	 *   leave listener never orphaned it): orphan it now and keep the premium entry + gift so the
+	 *   owner can still be restored.
+	 * - No clan (or only a standalone custom role): delete the role, revoke any gift, and remove the
+	 *   premium member entry immediately.
+	 *
+	 * Returns what happened so the caller can keep its counters accurate.
 	 */
 	private async cleanupPremiumMember(
 		premiumMember: PremiumMember,
 		guildName: string,
 		reason: 'mismatch' | 'missing',
-	): Promise<void> {
+	): Promise<CleanupOutcome> {
 		const { guildId, userId, customRoleId } = premiumMember;
 		addBreadcrumb('Starting cleanupPremiumMember', { guildId, userId, customRoleId, guildName, reason });
+		this.container.logger.info(
+			`${LOG_PREFIX} [CLEANUP] Starting cleanup for ${reason} premium member ${userId} in guild ${guildName} (${guildId}) (customRoleId=${customRoleId ?? 'none'}, gift=${premiumMember.giftedRoleToUserId ?? 'none'})`,
+		);
 
 		const guild = this.container.client.guilds.resolve(guildId);
 		if (!guild) {
 			addBreadcrumb('cleanupPremiumMember: guild not found', { guildId }, 'warning');
-			return;
+			this.container.logger.warn(
+				`${LOG_PREFIX} [CLEANUP] Guild ${guildId} not found; skipping cleanup for ${userId}`,
+			);
+			return 'skipped';
 		}
-
-		let shouldDeleteCustomRole = false;
 
 		if (customRoleId) {
 			addBreadcrumb('Checking for clan', { customRoleId });
@@ -124,51 +145,64 @@ export class CheckPremiumMemberAbilities extends Task {
 				clan = await clanManager.getClan();
 				addBreadcrumb('Clan lookup completed', { found: Boolean(clan), customRoleId });
 			} catch (error) {
-				addBreadcrumb('Clan lookup failed', { error: String(error), customRoleId }, 'error');
+				// Never destroy a possible clan owner's data on a transient lookup error - defer instead.
+				addBreadcrumb(
+					'Clan lookup failed, deferring cleanup to be safe',
+					{ error: String(error), customRoleId },
+					'error',
+				);
 				captureError(error as Error, 'cleanupPremiumMember: getClan failed', { guildId, userId, customRoleId });
-				shouldDeleteCustomRole = true;
+				this.container.logger.warn(
+					`${LOG_PREFIX} [CLEANUP] Clan lookup failed for role ${customRoleId} (owner ${userId}); deferring cleanup to avoid data loss`,
+				);
+				return 'skipped';
 			}
 
 			if (clan) {
 				if (clan.deletionTaskId) {
 					this.container.logger.info(
-						`${LOG_PREFIX} [CLEANUP] Clan for role ${customRoleId} is already orphaned, skipping`,
+						`${LOG_PREFIX} [CLEANUP] Clan for role ${customRoleId} is already orphaned (task ${clan.deletionTaskId}); preserving premium entry + gift for the grace period`,
 					);
-					addBreadcrumb('Clan already orphaned, skipping deletion', {
+					addBreadcrumb('Clan already orphaned, deferring cleanup to grace period', {
 						customRoleId,
 						deletionTaskId: clan.deletionTaskId,
 					});
-				} else {
-					try {
-						addBreadcrumb('Deleting clan', { customRoleId });
-						await clanManager.deleteClan();
-						this.container.logger.info(
-							`${LOG_PREFIX} [CLEANUP] Deleted clan for role ${customRoleId} for ${reason} user ${userId}`,
-						);
-						addBreadcrumb('Clan deleted successfully', { customRoleId, reason, userId });
-						shouldDeleteCustomRole = true;
-					} catch (error) {
-						this.container.logger.error(
-							`${LOG_PREFIX} [CLEANUP] Failed to delete clan for role ${customRoleId}:`,
-							error,
-						);
-						addBreadcrumb('Failed to delete clan', { error: String(error), customRoleId }, 'error');
-						captureError(error as Error, 'cleanupPremiumMember: deleteClan failed', {
-							guildId,
-							userId,
-							customRoleId,
-						});
-						shouldDeleteCustomRole = true;
-					}
+					return 'skipped';
 				}
-			} else {
-				addBreadcrumb('No clan found for role, will delete role', { customRoleId });
-				shouldDeleteCustomRole = true;
-			}
-		}
 
-		if (customRoleId && shouldDeleteCustomRole) {
-			addBreadcrumb('Fetching custom role from Discord', { customRoleId });
+				// Clan exists but has no grace period yet (e.g. the owner left while the bot was offline,
+				// so the live leave listener never orphaned it). Start the grace period now and keep the
+				// premium entry + gift intact so the owner can still be restored if they come back.
+				try {
+					addBreadcrumb('Clan found without grace period, orphaning it now', { customRoleId });
+					await clanManager.makeClanOrphan();
+					this.container.logger.info(
+						`${LOG_PREFIX} [CLEANUP] Clan for role ${customRoleId} (owner ${userId}) had no grace period; orphaned it now and preserved premium entry + gift`,
+					);
+					addBreadcrumb('Clan orphaned during cleanup, premium entry preserved', { customRoleId, userId });
+					return 'orphaned';
+				} catch (error) {
+					addBreadcrumb(
+						'Failed to orphan clan during cleanup, deferring',
+						{ error: String(error), customRoleId },
+						'error',
+					);
+					captureError(error as Error, 'cleanupPremiumMember: makeClanOrphan failed', {
+						guildId,
+						userId,
+						customRoleId,
+					});
+					this.container.logger.error(
+						`${LOG_PREFIX} [CLEANUP] Failed to orphan clan for role ${customRoleId} (owner ${userId}); deferring cleanup`,
+						error,
+					);
+					return 'skipped';
+				}
+			}
+
+			// customRoleId is set but there's no clan record: this is a standalone custom role with no
+			// clan to protect, so it's safe to delete the Discord role right away.
+			addBreadcrumb('No clan for role, deleting standalone custom role', { customRoleId });
 			let role;
 			try {
 				role = await guild.roles.fetch(customRoleId);
@@ -183,7 +217,7 @@ export class CheckPremiumMemberAbilities extends Task {
 					addBreadcrumb('Deleting custom role', { customRoleId, roleName: role.name });
 					await role.delete(`Premium member ${reason}: user ${userId} lost abilities`);
 					this.container.logger.info(
-						`${LOG_PREFIX} [CLEANUP] Deleted custom role ${customRoleId} for ${reason} user ${userId}`,
+						`${LOG_PREFIX} [CLEANUP] Deleted standalone custom role ${customRoleId} for ${reason} user ${userId}`,
 					);
 					addBreadcrumb('Custom role deleted successfully', { customRoleId, userId });
 				} catch (error) {
@@ -210,6 +244,9 @@ export class CheckPremiumMemberAbilities extends Task {
 			});
 			try {
 				await ClanManager.deleteGiftedRole(premiumMember);
+				this.container.logger.info(
+					`${LOG_PREFIX} [CLEANUP] Revoked gifted Legend role from ${reason} member ${userId} (was gifted to ${premiumMember.giftedRoleToUserId})`,
+				);
 				addBreadcrumb('Gifted Legend role removed', { guildId, userId });
 			} catch (error) {
 				this.container.logger.error(
@@ -229,7 +266,7 @@ export class CheckPremiumMemberAbilities extends Task {
 			}
 		}
 
-		// 3. Delete premium member entry from database
+		// No clan to protect, so remove the premium member entry for good.
 		addBreadcrumb('Deleting premium member from database', { guildId, userId });
 		try {
 			await this.container.prisma.premiumMember.delete({
@@ -259,6 +296,7 @@ export class CheckPremiumMemberAbilities extends Task {
 		}
 
 		addBreadcrumb('cleanupPremiumMember completed', { guildId, userId, reason });
+		return 'deleted';
 	}
 
 	public async checkAbilities(
@@ -359,11 +397,16 @@ export class CheckPremiumMemberAbilities extends Task {
 						// Fix missing members if mode is 'fix-missing' or 'fix-all'
 						if (fixMode === 'fix-missing' || fixMode === 'fix-all') {
 							addBreadcrumb('Cleaning up missing member', { userId: premiumMember.userId, fixMode });
-							await this.cleanupPremiumMember(premiumMember, guild.name, 'missing');
-							fixed++;
+							const outcome = await this.cleanupPremiumMember(premiumMember, guild.name, 'missing');
 
-							if (premiumMember.giftedRoleToUserId) {
-								staleGiftsFixed++;
+							if (outcome === 'deleted') {
+								fixed++;
+
+								if (premiumMember.giftedRoleToUserId) {
+									staleGiftsFixed++;
+								}
+							} else if (outcome === 'orphaned') {
+								orphanedClansFixed++;
 							}
 						}
 
@@ -443,11 +486,16 @@ export class CheckPremiumMemberAbilities extends Task {
 						// Fix mismatches if mode is 'fix-mismatches' or 'fix-all'
 						if (fixMode === 'fix-mismatches' || fixMode === 'fix-all') {
 							addBreadcrumb('Cleaning up mismatch member', { userId: premiumMember.userId, fixMode });
-							await this.cleanupPremiumMember(premiumMember, guild.name, 'mismatch');
-							fixed++;
+							const outcome = await this.cleanupPremiumMember(premiumMember, guild.name, 'mismatch');
 
-							if (premiumMember.giftedRoleToUserId) {
-								staleGiftsFixed++;
+							if (outcome === 'deleted') {
+								fixed++;
+
+								if (premiumMember.giftedRoleToUserId) {
+									staleGiftsFixed++;
+								}
+							} else if (outcome === 'orphaned') {
+								orphanedClansFixed++;
 							}
 						}
 					}
