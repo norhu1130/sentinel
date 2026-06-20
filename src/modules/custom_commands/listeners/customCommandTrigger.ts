@@ -6,6 +6,7 @@ import { LogPrefix } from '../../../lib/utils/logPrefix.js';
 import { hasCustomCommandName } from '../customCommandCache.js';
 import {
 	CUSTOM_COMMAND_PREFIX,
+	SHOULD_BLOCK_ORPHANED_CLAN_COMMANDS,
 	isRateLimited,
 	isValidCommandName,
 	normalizeCommandName,
@@ -69,6 +70,16 @@ export class CustomCommandTrigger extends Listener {
 
 		if (!command) {
 			return;
+		}
+
+		if (SHOULD_BLOCK_ORPHANED_CLAN_COMMANDS) {
+			const clan = await this.container.prisma.clan.findFirst({
+				where: { guildId: message.guildId, customRoleId: command.clanCustomRoleId },
+				select: { deletionTaskId: true },
+			});
+			if (clan?.deletionTaskId) {
+				return; // Clan is orphaned; silently ignore the command trigger.
+			}
 		}
 
 		const content = [command.text, command.mediaUrl].filter(Boolean).join('\n') || undefined;

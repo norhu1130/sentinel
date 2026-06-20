@@ -7,6 +7,11 @@ import { ClanManager } from '../../lib/abilities/ClanManager.js';
 import { LogPrefix } from '../../lib/utils/logPrefix.js';
 
 /**
+ * Whether to block custom commands from orphaned clans.
+ */
+export const SHOULD_BLOCK_ORPHANED_CLAN_COMMANDS = true;
+
+/**
  * The prefix that triggers a custom command in chat, e.g. `!cat`.
  */
 export const CUSTOM_COMMAND_PREFIX = '!';

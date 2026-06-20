@@ -458,7 +458,7 @@ export class CustomCommandCommand extends Subcommand {
 		await interaction.editReply({
 			embeds: [
 				createInfoEmbed(
-					`That command can't be saved because it would be blocked by this server's AutoMod rule`// **${violation.ruleName}** (matched \`${match}\`).`,
+					`That command can't be saved because it would be blocked by this server's AutoMod rule`, // **${violation.ruleName}** (matched \`${match}\`).`,
 				),
 			],
 		});
