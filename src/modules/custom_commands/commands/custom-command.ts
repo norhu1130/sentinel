@@ -9,6 +9,7 @@ import {
 } from 'discord.js';
 import { MemberAbilities } from '../../../lib/abilities/MemberAbilities.js';
 import { RoleAbilitiesCalculator } from '../../../lib/abilities/RoleAbilities.js';
+import { recordClanEvent } from '../../../lib/utils/clanHistory.js';
 import { createInfoEmbed } from '../../../lib/utils/createEmbed.js';
 import { addCustomCommandName, removeCustomCommandName } from '../customCommandCache.js';
 import {
@@ -131,6 +132,16 @@ export class CustomCommandCommand extends Subcommand {
 
 		addCustomCommandName(interaction.guildId, name);
 
+		await recordClanEvent({
+			guildId: interaction.guildId,
+			customRoleId: clan.customRoleId,
+			clanName: interaction.guild.roles.cache.get(clan.customRoleId)?.name ?? null,
+			ownerUserId: interaction.user.id,
+			actorUserId: interaction.user.id,
+			eventType: 'CustomCommandCreated',
+			metadata: { command: name },
+		});
+
 		await interaction.editReply({
 			embeds: [
 				createInfoEmbed(
@@ -206,6 +217,16 @@ export class CustomCommandCommand extends Subcommand {
 			data: { text: newText, ...newMedia },
 		});
 
+		await recordClanEvent({
+			guildId: interaction.guildId,
+			customRoleId: clan.customRoleId,
+			clanName: interaction.guild.roles.cache.get(clan.customRoleId)?.name ?? null,
+			ownerUserId: interaction.user.id,
+			actorUserId: interaction.user.id,
+			eventType: 'CustomCommandEdited',
+			metadata: { command: name },
+		});
+
 		await interaction.editReply({
 			embeds: [createInfoEmbed(`Updated \`${CUSTOM_COMMAND_PREFIX}${name}\`.`)],
 		});
@@ -241,6 +262,16 @@ export class CustomCommandCommand extends Subcommand {
 		}
 
 		await removeCustomCommandName(interaction.guildId, name);
+
+		await recordClanEvent({
+			guildId: interaction.guildId,
+			customRoleId: clan.customRoleId,
+			clanName: interaction.guild.roles.cache.get(clan.customRoleId)?.name ?? null,
+			ownerUserId: interaction.user.id,
+			actorUserId: interaction.user.id,
+			eventType: 'CustomCommandDeleted',
+			metadata: { command: name },
+		});
 
 		await interaction.editReply({
 			embeds: [createInfoEmbed(`Deleted \`${CUSTOM_COMMAND_PREFIX}${name}\`.`)],

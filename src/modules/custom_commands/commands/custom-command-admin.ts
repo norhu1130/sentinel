@@ -7,6 +7,7 @@ import {
 	MessageFlags,
 	PermissionFlagsBits,
 } from 'discord.js';
+import { recordClanEvent } from '../../../lib/utils/clanHistory.js';
 import { createInfoEmbed } from '../../../lib/utils/createEmbed.js';
 import { removeCustomCommandName } from '../customCommandCache.js';
 import { CUSTOM_COMMAND_PREFIX, MAX_CUSTOM_COMMANDS_PER_CLAN, normalizeCommandName } from '../customCommandUtils.js';
@@ -98,6 +99,16 @@ export class CustomCommandAdminCommand extends Subcommand {
 		}
 
 		await removeCustomCommandName(interaction.guildId, name);
+
+		await recordClanEvent({
+			guildId: interaction.guildId,
+			customRoleId: clanCustomRoleId,
+			clanName: this.clanName(interaction, clanCustomRoleId),
+			actorUserId: interaction.user.id,
+			eventType: 'CustomCommandDeleted',
+			reason: 'deleted by a moderator',
+			metadata: { command: name, createdBy: deleted.createdBy },
+		});
 
 		await interaction.editReply({
 			embeds: [

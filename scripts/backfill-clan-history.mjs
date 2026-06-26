@@ -213,7 +213,9 @@ async function main() {
 		if (!APPLY) {
 			console.log('\nDRY RUN — nothing written. Re-run with --apply to insert these events.');
 			for (const event of toInsert.slice(0, 20)) {
-				console.log(`  ${new Date(event.createdAt).toISOString()} ${event.eventType} role=${event.customRoleId}`);
+				console.log(
+					`  ${new Date(event.createdAt).toISOString()} ${event.eventType} role=${event.customRoleId}`,
+				);
 			}
 			if (toInsert.length > 20) console.log(`  ...and ${toInsert.length - 20} more`);
 			return;

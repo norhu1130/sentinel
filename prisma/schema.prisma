@@ -373,6 +373,9 @@ enum ClanEventType {
   VisibilityChanged
   PremiumRoleDeleted
   GiftedRoleRevoked
+  CustomCommandCreated
+  CustomCommandEdited
+  CustomCommandDeleted
 }
 
 /// Append-only audit trail of everything that happens to a clan, from creation to deletion and
