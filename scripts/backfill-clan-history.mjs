@@ -154,6 +154,17 @@ function parseLine(line) {
 		};
 	}
 
+	if (/Deleted deletion task to make clan not orphan/.test(line)) {
+		return {
+			guildId: guild,
+			customRoleId: role,
+			eventType: 'OrphanCancelled',
+			ownerUserId: owner,
+			createdAt,
+			reason: 'Owner returned (backfilled)',
+		};
+	}
+
 	return null;
 }
 
