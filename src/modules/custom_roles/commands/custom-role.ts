@@ -11,6 +11,7 @@ import magicBytes from 'magic-bytes.js';
 import { ClanDeletionStatus, ClanManager } from '../../../lib/abilities/ClanManager.js';
 import { MemberAbilities } from '../../../lib/abilities/MemberAbilities.js';
 import { RoleAbilitiesCalculator } from '../../../lib/abilities/RoleAbilities.js';
+import { recordClanEvent } from '../../../lib/utils/clanHistory.js';
 import { createErrorEmbed, createInfoEmbed } from '../../../lib/utils/createEmbed.js';
 import { LogPrefix } from '../../../lib/utils/logPrefix.js';
 import { waitForButtonConfirm } from '../../../lib/utils/waitForInteraction.js';
@@ -288,6 +289,32 @@ export class CustomRoleCommand extends Subcommand {
 				},
 			});
 
+			// Record cosmetic changes to an existing custom role (the clan's identity), keyed by role id.
+			if (oldRole) {
+				if (name && name !== oldRole.name) {
+					await recordClanEvent({
+						guildId: interaction.guildId,
+						customRoleId: newRole.id,
+						clanName: newRole.name,
+						ownerUserId: interaction.user.id,
+						actorUserId: interaction.user.id,
+						eventType: 'Renamed',
+						metadata: { from: oldRole.name, to: newRole.name },
+					});
+				}
+
+				if (iconUrl || iconUpload) {
+					await recordClanEvent({
+						guildId: interaction.guildId,
+						customRoleId: newRole.id,
+						clanName: newRole.name,
+						ownerUserId: interaction.user.id,
+						actorUserId: interaction.user.id,
+						eventType: 'IconChanged',
+					});
+				}
+			}
+
 			await interaction.editReply({
 				embeds: [
 					createInfoEmbed(
@@ -459,7 +486,10 @@ export class CustomRoleCommand extends Subcommand {
 		}
 
 		if (oldClan) {
-			const clanDeletionStatus = await clanManager.deleteClan();
+			const clanDeletionStatus = await clanManager.deleteClan({
+				actorUserId: interaction.user.id,
+				reason: 'Owner deleted their custom role',
+			});
 
 			if (clanDeletionStatus !== ClanDeletionStatus.Deleted) {
 				const errorMessage = `Your custom role could not be deleted because your clan could not be deleted: ${ClanManager.getDeletionStatusMessage(clanDeletionStatus)}`;

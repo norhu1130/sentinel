@@ -34,7 +34,7 @@ export class GuildMemberComesBack extends Listener<typeof Events.GuildMemberAdd>
 		});
 
 		try {
-			await clanManager.makeClanNotOrphan();
+			await clanManager.makeClanNotOrphan({ actorUserId: member.id, reason: 'Owner returned to the server' });
 			Sentry.addBreadcrumb({
 				category: 'clan',
 				message: `${logPrefix} Clan restored successfully`,

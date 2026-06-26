@@ -3,6 +3,7 @@ import { Events, Listener } from '@sapphire/framework';
 import * as Sentry from '@sentry/node';
 import type { GuildMember } from 'discord.js';
 import { ClanManager } from '../../../lib/abilities/ClanManager.js';
+import { recordClanEvent } from '../../../lib/utils/clanHistory.js';
 import { LogPrefix } from '../../../lib/utils/logPrefix.js';
 
 @ApplyOptions<Listener.Options>({ event: Events.GuildMemberRemove })
@@ -36,7 +37,7 @@ export class GuildMemberRemove extends Listener<typeof Events.GuildMemberRemove>
 			});
 
 			try {
-				await clanManager.makeClanOrphan();
+				await clanManager.makeClanOrphan(false, 'Owner left the server');
 				Sentry.addBreadcrumb({
 					category: 'clan',
 					message: `${logPrefix} Clan marked as orphan successfully`,
@@ -118,13 +119,26 @@ export class GuildMemberRemove extends Listener<typeof Events.GuildMemberRemove>
 		});
 
 		try {
-			const deleteResult = await this.container.prisma.clanMember.deleteMany({
-				where: {
-					clanGuildId: member.guild.id,
-					userId: member.id,
-					...(customRoleId ? { clanCustomRoleId: { notIn: [customRoleId] } } : {}),
-				},
-			});
+			const clanMemberWhere = {
+				clanGuildId: member.guild.id,
+				userId: member.id,
+				...(customRoleId ? { clanCustomRoleId: { notIn: [customRoleId] } } : {}),
+			};
+
+			// Record a MemberLeft event for each clan they were a member of (excluding their own clan,
+			// which is handled by the orphan flow above) before the rows are deleted.
+			const leavingMemberships = await this.container.prisma.clanMember.findMany({ where: clanMemberWhere });
+			for (const membership of leavingMemberships) {
+				await recordClanEvent({
+					guildId: membership.clanGuildId,
+					customRoleId: membership.clanCustomRoleId,
+					targetUserId: member.id,
+					eventType: 'MemberLeft',
+					reason: 'Member left the server',
+				});
+			}
+
+			const deleteResult = await this.container.prisma.clanMember.deleteMany({ where: clanMemberWhere });
 
 			Sentry.addBreadcrumb({
 				category: 'clan',

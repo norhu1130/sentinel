@@ -175,7 +175,10 @@ export class CheckPremiumMemberAbilities extends Task {
 				// premium entry + gift intact so the owner can still be restored if they come back.
 				try {
 					addBreadcrumb('Clan found without grace period, orphaning it now', { customRoleId });
-					await clanManager.makeClanOrphan();
+					await clanManager.makeClanOrphan(
+						false,
+						'Owner left while bot was offline (detected by reconciler)',
+					);
 					this.container.logger.info(
 						`${LOG_PREFIX} [CLEANUP] Clan for role ${customRoleId} (owner ${userId}) had no grace period; orphaned it now and preserved premium entry + gift`,
 					);

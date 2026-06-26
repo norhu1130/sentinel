@@ -250,7 +250,7 @@ export class ClanJoinRequestHandler extends InteractionHandler {
 				data: tags,
 			});
 
-			const addStatus = await clanManager.inviteMember(requester.id, true);
+			const addStatus = await clanManager.inviteMember(requester.id, true, { actorUserId: interaction.user.id });
 			this.container.logger.info(
 				`${LogPrefix.CLAN_JOIN_REQUEST} clanManager.inviteMember returned status: ${ClanMemberAddStatus[addStatus]} (${addStatus})`,
 			);

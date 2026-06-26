@@ -26,6 +26,7 @@ import {
 	MAX_MEMBERS_IN_CLAN,
 } from '../../../lib/abilities/ClanManager.js';
 import { MemberAbilities } from '../../../lib/abilities/MemberAbilities.js';
+import { recordClanEvent } from '../../../lib/utils/clanHistory.js';
 import { createErrorEmbed, createInfoEmbed } from '../../../lib/utils/createEmbed.js';
 import { LogPrefix } from '../../../lib/utils/logPrefix.js';
 import { trimPretty } from '../../../lib/utils/trim.js';
@@ -183,7 +184,10 @@ export class ClanCommand extends Subcommand {
 			return;
 		}
 
-		const clanDeletionStatus = await clanManager.deleteClan();
+		const clanDeletionStatus = await clanManager.deleteClan({
+			actorUserId: interaction.user.id,
+			reason: 'Owner deleted their clan',
+		});
 
 		if (clanDeletionStatus !== ClanDeletionStatus.Deleted) {
 			const errorMessage = ClanManager.getDeletionStatusMessage(clanDeletionStatus);
@@ -559,7 +563,10 @@ export class ClanCommand extends Subcommand {
 		});
 
 		try {
-			const clanMemberRemoveStatus = await clanManager.removeMember(memberToKick);
+			const clanMemberRemoveStatus = await clanManager.removeMember(memberToKick, {
+				actorUserId: interaction.user.id,
+				reason: 'Kicked by clan owner',
+			});
 
 			Sentry.addBreadcrumb({
 				category: 'clan',
@@ -773,7 +780,10 @@ export class ClanCommand extends Subcommand {
 		});
 
 		try {
-			const removeStatus = await clanManager.removeMember(interaction.member);
+			const removeStatus = await clanManager.removeMember(interaction.member, {
+				actorUserId: interaction.member.id,
+				reason: 'Member left the clan',
+			});
 
 			Sentry.addBreadcrumb({
 				category: 'clan',
@@ -984,6 +994,16 @@ export class ClanCommand extends Subcommand {
 			});
 
 			clanManager.invalidateCache('clan');
+
+			await recordClanEvent({
+				guildId: clan.guildId,
+				customRoleId: clan.customRoleId,
+				clanName: interaction.guild.roles.cache.get(clan.customRoleId)?.name ?? null,
+				ownerUserId: interaction.user.id,
+				actorUserId: interaction.user.id,
+				eventType: 'DescriptionChanged',
+				metadata: { description: newDescription ?? null },
+			});
 
 			await interaction.editReply({
 				embeds: [createInfoEmbed(`✅ Successfully updated your clan's description.`)],
@@ -1329,6 +1349,16 @@ export class ClanCommand extends Subcommand {
 			});
 
 			clanManager.invalidateCache('clan');
+
+			await recordClanEvent({
+				guildId: clan.guildId,
+				customRoleId: clan.customRoleId,
+				clanName: interaction.guild.roles.cache.get(clan.customRoleId)?.name ?? null,
+				ownerUserId: interaction.user.id,
+				actorUserId: interaction.user.id,
+				eventType: 'VisibilityChanged',
+				metadata: { isVisibleInDirectory: newVisibilityState },
+			});
 
 			await interaction.editReply({
 				embeds: [

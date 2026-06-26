@@ -34,7 +34,7 @@ export class PremiumSubscribe extends Listener<typeof Events.GuildMemberUpdate> 
 
 		// If user has a clan, we can end the cooldown and un-orphan the clan
 		if (canNowCreateClan && clan) {
-			await clanManager.makeClanNotOrphan();
+			await clanManager.makeClanNotOrphan({ actorUserId: newMember.id, reason: 'Owner regained premium' });
 		}
 	}
 }

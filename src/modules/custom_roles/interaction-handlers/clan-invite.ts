@@ -80,7 +80,9 @@ export class ClanInvite extends InteractionHandler {
 
 		const clanManager = new ClanManager(clanOwner);
 
-		const clanMemberAddStatus = await clanManager.inviteMember(data.invitedUser);
+		const clanMemberAddStatus = await clanManager.inviteMember(data.invitedUser, false, {
+			actorUserId: data.invitedUser,
+		});
 
 		if (clanMemberAddStatus !== ClanMemberAddStatus.Added) {
 			await interaction

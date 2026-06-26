@@ -356,3 +356,49 @@ model CustomEmoji {
   @@index([guildId, userId])
   @@map("custom_emojis")
 }
+
+/// Lifecycle events recorded for a clan's persistent audit history.
+enum ClanEventType {
+  Created
+  Deleted
+  Orphaned
+  OrphanCancelled
+  Restored
+  MemberJoined
+  MemberLeft
+  OwnershipTransferred
+  Renamed
+  IconChanged
+  DescriptionChanged
+  VisibilityChanged
+  PremiumRoleDeleted
+  GiftedRoleRevoked
+}
+
+/// Append-only audit trail of everything that happens to a clan, from creation to deletion and
+/// beyond. It intentionally has NO relation to Clan so the history survives the clan being deleted,
+/// and is keyed by the clan's stable identity (guildId + customRoleId).
+model ClanHistoryEvent {
+  id           String        @id @default(cuid())
+  guildId      String
+  /// The clan's stable identity (its custom role id). Kept even after the clan row is gone.
+  customRoleId String
+  /// Snapshot of the clan/role name when the event happened, so old rows stay readable.
+  clanName     String?
+  /// Snapshot of the clan owner's user id at event time.
+  ownerUserId  String?
+  eventType    ClanEventType
+  /// Who triggered the event (a user id), or null for system/scheduled actions.
+  actorUserId  String?
+  /// The member affected by the event (joins, kicks, transfers, gifts), if any.
+  targetUserId String?
+  /// Human-readable explanation (e.g. "owner left the server", "grace period expired").
+  reason       String?
+  /// Structured extras (channelId, taskId, old/new values, deletionDate, backfilled, ...).
+  metadata     Json?
+  createdAt    DateTime      @default(now())
+
+  @@index([guildId, customRoleId, createdAt])
+  @@index([guildId, ownerUserId])
+  @@map("clan_history_events")
+}
